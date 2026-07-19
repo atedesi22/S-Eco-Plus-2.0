@@ -1,6 +1,7 @@
 <?php
 
 // use App\Http\Controllers\AdminController;
+use App\Http\Controllers\Admin\ObjectiveController;
 use App\Http\Controllers\Admin\StructureController;
 use App\Http\Controllers\Admin\SuperAdminController;
 use App\Http\Controllers\ClientController;
@@ -101,6 +102,14 @@ Route::middleware(['auth'])->group(function () {
         // Accessible au SuperAdmin, PDG, DG et DAF (Synchro avec le niveau hiérarchique du Sidebar)
         Route::middleware(['role:SuperAdmin|PDG|DG|DAF'])->group(function () {
             Route::get('/structures', [StructureController::class, 'index'])->name('structures.index');
+            // Liste et affichage des objectifs
+            Route::get('/objectives', [ObjectiveController::class, 'index'])->name('objectives.index');
+
+            // Création d'un nouvel objectif
+            Route::post('/objectives', [ObjectiveController::class, 'store'])->name('objectives.store');
+
+            // Application d'une sanction sur un objectif spécifique
+            Route::post('/objectives/{id}/sanction', [ObjectiveController::class, 'storeSanction'])->name('objectives.sanction');
         });
     });
 });

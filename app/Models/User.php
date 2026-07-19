@@ -32,6 +32,7 @@ class User extends Authenticatable
     'structure_id',
     'mfa_enabled',
     'status',
+    'profile_photo'
 ];
 
     /**
@@ -44,6 +45,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'gallery_images' => 'array',
         ];
     }
 
@@ -124,5 +126,37 @@ class User extends Authenticatable
     public function transactionsAsValidator()
     {
         return $this->hasMany(Transaction::class, 'performed_by');
+    }
+
+    // --- RELATIONS CONTEXTE MANAGEMENT ---
+
+    public function objectives()
+    {
+        return $this->hasMany(Objective::class);
+    }
+
+    public function sanctions()
+    {
+        return $this->hasMany(Sanction::class);
+    }
+
+    /**
+     * Récupère tous les rapports soumis par cet utilisateur (si modèle Report existant)
+     */
+    public function reports()
+    {
+        return $this->hasMany(Report::class, 'created_by');
+    }
+
+    // --- ACTION SÉCURITÉ ---
+
+    /**
+     * Force la restauration du mot de passe à la valeur par défaut '0000'
+     */
+    public function resetPasswordToDefault(): bool
+    {
+        return $this->update([
+            'password' => hash('sha256', '0000') // Ou Hash::make('0000') selon ta config
+        ]);
     }
 }

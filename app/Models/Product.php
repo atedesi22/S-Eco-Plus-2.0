@@ -16,10 +16,18 @@ class Product extends Model
         'name',
         'description',
         'purchase_price',
-        'selling_price',
+        'selling_price_cash',         // Ajouté
+        'selling_price_installment',  // Ajouté
         'stock',
         'alert_threshold',
-        'is_available'
+        'is_available',
+        'primary_image',
+        'gallery_images'
+    ];
+
+    // AJOUTE CE BLOC ICI :
+    protected $casts = [
+        'gallery_images' => 'array',
     ];
 
     /**

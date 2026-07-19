@@ -19,13 +19,18 @@ return new class extends Migration
 
             // Tarification en monnaie entière (XAF)
             $table->integer('purchase_price'); // Prix d'achat fournisseur
-            $table->integer('selling_price');  // Prix de vente public
+            $table->integer('selling_price_cash');        // Prix de vente au comptant
+            $table->integer('selling_price_installment'); // Prix de vente total via collecte échelonnée
 
             // Gestion de stock
             $table->integer('stock')->default(0);
             $table->integer('alert_threshold')->default(5); // Seuil d'alerte stock bas
 
             $table->boolean('is_available')->default(true);
+            // --- NOUVELLES COLONNES MULTIMÉDIAS ---
+            $table->string('primary_image')->nullable(); // Image principale obligatoire ou par défaut
+            $table->json('gallery_images')->nullable();  // Stockera les chemins des 3 photos de détails
+
             $table->timestamps();
         });
     }

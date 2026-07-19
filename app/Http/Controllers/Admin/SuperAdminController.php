@@ -9,14 +9,17 @@ use App\Models\Structure;
 use App\Models\Tontine_plan;
 use App\Models\Transaction;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class SuperAdminController extends Controller
 {
     //
     // 1. Tableau de bord SuperAdmin (Statistiques globales du système)
-    public function dashboard()
+    public function dashboard(Request $request)
     {
         $totalClients = User::role('Client')->count();
         $totalCommercials = User::role('Commercial')->count();
@@ -32,6 +35,63 @@ class SuperAdminController extends Controller
         $totalRegions = Structure::where('type', 'regional_direction')->count();
         $totalAgencies = Structure::where('type', 'agency')->count();
 
+
+        $period = $request->input('period', 'month'); // Période par défaut
+
+
+        $startDate = Carbon::now();
+
+        // Définition de la plage de date selon le filtre
+        switch ($period) {
+            case 'day':
+                $startDate = Carbon::today();
+                break;
+            case 'week':
+                $startDate = Carbon::now()->startOfWeek();
+                break;
+            case 'month':
+                $startDate = Carbon::now()->startOfMonth();
+                break;
+            case 'quarter': // Trimestre
+                $startDate = Carbon::now()->startOfQuarter();
+                break;
+            case 'semester': // Semestre (6 mois)
+                $startDate = Carbon::now()->subMonths(6)->startOfMonth();
+                break;
+            case 'year':
+                $startDate = Carbon::now()->startOfYear();
+                break;
+        }
+
+        // 1. Nombre de comptes créés (Rôle client ou filtre générique)
+        $accountsCount = User::where('created_at', '>=', $startDate)->count();
+
+        // 2. Volume Total des Transactions
+        $totalTransactions = Transaction::where('created_at', '>=', $startDate)->sum('amount');
+
+        // 3. Gains (Frais d'adhésion, intérêts perçus, marges boutiques, frais de dossiers...)
+        $gains = Transaction::where('created_at', '>=', $startDate)
+            ->whereIn('type', ['frais_dossier', 'interets', 'commission', 'vente_cash'])
+            ->sum('amount');
+
+        // 4. Pertes (Crédits en défaut, annulations, charges d'exploitation...)
+        $pertes = Transaction::where('created_at', '>=', $startDate)
+            ->whereIn('type', ['perte_credit', 'charge_exploitation', 'remboursement'])
+            ->sum('amount');
+
+        // Préparation des données chronologiques pour les graphiques (Ex: Agrégation par date)
+        $chartData = Transaction::select(
+                DB::raw('DATE(created_at) as date'),
+                DB::raw('SUM(amount) as total'),
+                DB::raw("SUM(CASE WHEN type IN ('frais_dossier', 'interets', 'commission', 'vente_cash') THEN amount ELSE 0 END) as gains"),
+                DB::raw("SUM(CASE WHEN type IN ('perte_credit', 'charge_exploitation', 'remboursement') THEN amount ELSE 0 END) as pertes")
+            )
+            ->where('created_at', '>=', $startDate)
+            ->groupBy('date')
+            ->orderBy('date', 'ASC')
+            ->get();
+
+
         return view('admin.dashboard', compact(
             'totalClients',
             'totalCommercials',
@@ -39,7 +99,13 @@ class SuperAdminController extends Controller
             'staffMembers',
             'superiors',
             'totalRegions',
-            'totalAgencies'
+            'totalAgencies',
+            'accountsCount',
+            'totalTransactions',
+            'gains',
+            'pertes',
+            'period',
+            'chartData'
         ));
     }
 
@@ -133,7 +199,9 @@ class SuperAdminController extends Controller
     public function shopIndex()
     {
         // Récupérer les articles physiques destinés à la vente / octroi de crédit bail
-        $products = Product::latest()->get();
+        // $products = Product::latest()->get();
+        // Récupérer tous les produits
+        $products = Product::all();
         return view('admin.modules.shop', compact('products'));
     }
 
@@ -142,11 +210,42 @@ class SuperAdminController extends Controller
         $request->validate([
             'name' => 'required|string|max:150',
             'purchase_price' => 'required|numeric|min:0',
-            'selling_price' => 'required|numeric|min:0',
+            'selling_price_cash' => 'required|numeric|min:0',
+            'selling_price_installment' => 'required|numeric|min:0',
             'stock' => 'required|integer|min:0',
+            'primary_image' => 'required|image|mimes:jpeg,png,jpg,webp|max:2048',
+            'gallery' => 'nullable|array|max:3',
+            'gallery.*' => 'image|mimes:jpeg,png,jpg,webp|max:2048'
         ]);
 
-        Product::create($request->only('name', 'purchase_price', 'selling_price', 'stock'));
+        // 1. Génération automatique de la référence unique
+        $reference = 'PRD-' . date('Y') . '-' . strtoupper(Str::random(6));
+
+        // 2. Traitement de l'image principale
+        $primaryPath = null;
+        if ($request->hasFile('primary_image')) {
+            $primaryPath = $request->file('primary_image')->store('products/primary', 'public');
+        }
+
+        // 3. Traitement des images secondaires (Max 3)
+        $galleryPaths = [];
+        if ($request->hasFile('gallery')) {
+            foreach ($request->file('gallery') as $file) {
+                $galleryPaths[] = $file->store('products/gallery', 'public');
+            }
+        }
+
+        // 4. Sauvegarde en Base de Données
+        Product::create([
+            'reference' => $reference,
+            'name' => $request->name,
+            'purchase_price' => $request->purchase_price,
+            'selling_price_cash' => $request->selling_price_cash,
+            'selling_price_installment' => $request->selling_price_installment,
+            'stock' => $request->stock,
+            'primary_image' => $primaryPath,
+            'gallery_images' => $galleryPaths, // Casté automatiquement en JSON
+        ]);
 
         return redirect()->back()->with('success', 'Produit référencé dans le stock central.');
     }
@@ -215,5 +314,14 @@ class SuperAdminController extends Controller
             ->get();
 
         return view('admin.modules.reports', compact('staffPerformances'));
+    }
+
+    //10. RESET PASSWORD UTILISATEUR A 000
+    public function resetUserPassword($id)
+    {
+        $user = User::findOrFail($id);
+        $user->resetPasswordToDefault();
+
+        return redirect()->back()->with('success', "Le mot de passe de l'agent a été réinitialisé à '0000'.");
     }
 }

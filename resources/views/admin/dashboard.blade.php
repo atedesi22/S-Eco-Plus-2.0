@@ -197,5 +197,148 @@
         </div>
     </div>
 
+    <!-- Header + Filtres Temporels -->
+    <div class="flex flex-col gap-4 pb-5 border-b md:flex-row md:items-center md:justify-between border-slate-800">
+        <div>
+            <h1 class="text-2xl font-black tracking-wide text-white">CONSOLE DE SUPERVISION S ECO PLUS</h1>
+            <p class="text-xs text-slate-400">Analyses macro-financières et suivi de croissance du réseau en temps réel</p>
+        </div>
+
+        <!-- Formulaire de filtrage rapide -->
+        <form method="GET" action="{{ route('admin.dashboard') }}" id="periodForm" class="flex p-1 space-x-1 border bg-slate-950 border-slate-800 rounded-xl">
+            @foreach(['day' => 'Jour', 'week' => 'Semaine', 'month' => 'Mois', 'quarter' => 'Trimestre', 'semester' => 'Semestre', 'year' => 'Annuel'] as $key => $label)
+                <button type="submit" name="period" value="{{ $key }}"
+                        class="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded-lg transition {{ ($period ?? 'month') === $key ? 'bg-emerald-500 text-slate-950' : 'text-slate-400 hover:text-white' }}">
+                    {{ $label }}
+                </button>
+            @endforeach
+        </form>
+    </div>
+
+    <!-- Les 4 Cartes Métriques (KPI) -->
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <!-- Comptes Créés -->
+        <div class="p-5 space-y-2 border bg-slate-900 border-slate-800 rounded-xl">
+            <div class="flex items-center justify-between text-slate-500">
+                <span class="text-[10px] uppercase font-bold tracking-wider">Nouveaux Comptes</span>
+                <i class="text-base bi bi-person-plus text-emerald-400"></i>
+            </div>
+            <p class="font-mono text-2xl font-black text-white">{{ number_format($accountsCount) }}</p>
+            <p class="text-[10px] text-slate-500 italic">Comptes enregistrés sur la période</p>
+        </div>
+
+        <!-- Volume Transactions -->
+        <div class="p-5 space-y-2 border bg-slate-900 border-slate-800 rounded-xl">
+            <div class="flex items-center justify-between text-slate-500">
+                <span class="text-[10px] uppercase font-bold tracking-wider">Flux Transactions</span>
+                <i class="text-base text-blue-400 bi bi-cash-stack"></i>
+            </div>
+            <p class="font-mono text-2xl font-black text-white">{{ number_format($totalTransactions, 0, '.', ' ') }} <span class="text-xs text-slate-400">XAF</span></p>
+            <p class="text-[10px] text-slate-500 italic">Volume d'argent brassé global</p>
+        </div>
+
+        <!-- Gains Globaux -->
+        <div class="p-5 space-y-2 border border-b-2 bg-slate-900 border-slate-800 rounded-xl border-b-emerald-500">
+            <div class="flex items-center justify-between text-slate-500">
+                <span class="text-[10px] uppercase font-bold tracking-wider">Gains / Recettes</span>
+                <i class="text-base bi bi-graph-up text-emerald-500"></i>
+            </div>
+            <p class="font-mono text-2xl font-black text-emerald-400">+{{ number_format($gains, 0, '.', ' ') }} <span class="text-xs text-slate-400">XAF</span></p>
+            <p class="text-[10px] text-slate-500 italic">Frais de dossiers, tontines & marges</p>
+        </div>
+
+        <!-- Pertes Globales -->
+        <div class="p-5 space-y-2 border border-b-2 bg-slate-900 border-slate-800 rounded-xl border-b-rose-500">
+            <div class="flex items-center justify-between text-slate-500">
+                <span class="text-[10px] uppercase font-bold tracking-wider">Pertes / Charges</span>
+                <i class="text-base bi bi-graph-down text-rose-500"></i>
+            </div>
+            <p class="font-mono text-2xl font-black text-rose-400">-{{ number_format($pertes, 0, '.', ' ') }} <span class="text-xs text-slate-400">XAF</span></p>
+            <p class="text-[10px] text-slate-500 italic">Défauts de recouvrement & charges</p>
+        </div>
+    </div>
+
+    <!-- Section des Graphiques (Deux colonnes) -->
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <!-- Graphe 1: Activité des Transactions -->
+        <div class="p-5 border bg-slate-900 border-slate-800 rounded-xl">
+            <h3 class="mb-4 text-xs font-bold tracking-wider uppercase text-slate-400">Évolution des Flux Financiers</h3>
+            <div class="h-64">
+                <canvas id="transactionsChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Graphe 2: Balance Gains / Pertes -->
+        <div class="p-5 border bg-slate-900 border-slate-800 rounded-xl">
+            <h3 class="mb-4 text-xs font-bold tracking-wider uppercase text-slate-400">Rendement Net (Gains vs Pertes)</h3>
+            <div class="h-64">
+                <canvas id="pnlChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts Graphiques Chart.JS -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const labels = {!! json_encode($chartData->pluck('date')) !!};
+
+        // Graphe 1 : Évolution des transactions
+        new Chart(document.getElementById('transactionsChart'), {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Volume (XAF)',
+                    data: {!! json_encode($chartData->pluck('total')) !!},
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' } },
+                    y: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' } }
+                }
+            }
+        });
+
+        // Graphe 2 : Gains et Pertes
+        new Chart(document.getElementById('pnlChart'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Gains',
+                        data: {!! json_encode($chartData->pluck('gains')) !!},
+                        backgroundColor: '#10b981',
+                        borderRadius: 4
+                    },
+                    {
+                        label: 'Pertes',
+                        data: {!! json_encode($chartData->pluck('pertes')) !!},
+                        backgroundColor: '#f43f5e',
+                        borderRadius: 4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { labels: { color: '#64748b' } } },
+                scales: {
+                    x: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' } },
+                    y: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' } }
+                }
+            }
+        });
+    </script>
+
 </div>
 @endsection
