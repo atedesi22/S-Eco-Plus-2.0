@@ -13,8 +13,13 @@ return new class extends Migration
     {
         Schema::create('zones', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('agency_id')->constrained()->onDelete('cascade');
-            $table->string('name'); // Ex: "Zone A - Marché Central"
+            $table->string('code')->unique(); // ex: ZN-AKW-01
+            $table->string('name'); // ex: Secteur Marché Central
+
+            // Relation avec l'Agence
+            $table->foreignId('structure_id')->constrained('structures')->onDelete('cascade');
+            $table->text('description')->nullable();
+            $table->boolean('is_active')->default(true);
             $table->timestamps();
         });
     }

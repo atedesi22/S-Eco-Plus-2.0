@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->string('name');
             $table->string('profile_photo')->nullable();
-            $table->string('email')->unique();
+            $table->string('email')->nullable();
             $table->string('phone')->nullable()->unique(); // Crucial pour les clients/agents de terrain au Cameroun
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
@@ -24,7 +24,6 @@ return new class extends Migration
 
             // --- RELATIONS TERRITORIALES DE S ECO PLUS ---
             // Un utilisateur (personnel ou client) est affilié à une agence et optionnellement à une zone
-            $table->foreignId('agency_id')->nullable()->constrained('agencies')->onDelete('set null');
             $table->foreignId('zone_id')->nullable()->constrained('zones')->onDelete('set null');
 
             // --- PARAMÈTRES DE SÉCURITÉ ---

@@ -13,9 +13,12 @@ return new class extends Migration
     {
         Schema::create('structures', function (Blueprint $table) {
             $table->id();
-            $table->string('name'); // Ex: "Direction Régionale Littoral" ou "Agence de Douala-Akwa"
+            $table->string('name'); // Ex: "Direction Régionale Littoral" ou "Agence Akwa"
             $table->enum('type', ['regional_direction', 'agency']);
-            $table->foreignId('parent_id')->nullable()->constrained('structures')->onDelete('cascade'); // Une agence dépend d'une direction régionale
+
+            // Relation hiérarchique : une agence dépend d'une direction régionale
+            $table->foreignId('parent_id')->nullable()->constrained('structures')->onDelete('cascade');
+
             $table->timestamps();
         });
     }

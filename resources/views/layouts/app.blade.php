@@ -21,7 +21,6 @@
 <!-- Initialisation globale d'Alpine sur le body pour que le bouton header ET leaside partagent la même variable -->
 <body class="flex min-h-screen antialiased bg-slate-950 text-slate-100" x-data="{ sidebarOpen: false }">
 
-    <!-- Sidebar (aside) -->
     <aside
     x-data="{ sidebarOpen: false }"
     :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
@@ -34,30 +33,29 @@
                 <div class="flex items-center justify-center w-8 h-8 font-bold rounded-lg bg-emerald-500 text-slate-950">S</div>
                 <span class="text-sm font-bold tracking-wider text-emerald-400">S ECO Internes</span>
             </div>
-            <!-- Fermeture sur Mobile -->
             <button @click="sidebarOpen = false" class="md:hidden text-slate-400 hover:text-white">
                 <i class="text-xl bi bi-x-lg"></i>
             </button>
         </div>
 
         <nav class="space-y-1">
-            <!-- ACCÈS GENERAL DASHBOARD -->
             <a href="{{ route('admin.dashboard') }}"
             class="flex items-center space-x-3 px-4 py-2.5 rounded-xl text-sm font-medium transition {{ request()->routeIs('admin.dashboard') ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
                 <i class="text-base bi bi-speedometer2"></i>
                 <span>Tableau de bord</span>
             </a>
 
-            <!-- EXCLUSIVITÉ SUPERADMIN : CONFIGURATION SYSTEME -->
-            @role('SuperAdmin')
-            <div class="pt-4 pb-1 px-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">Contrôle Racine (SuperAdmin)</div>
+            @hasanyrole('SuperAdmin|PDG|DG|DAF')
+            <div class="pt-4 pb-1 px-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">Ressources Humaines</div>
 
             <a href="{{ route('admin.staff.index') }}"
             class="flex items-center px-4 py-2 space-x-3 text-sm transition rounded-xl {{ request()->routeIs('admin.staff.*') ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
                 <i class="bi bi-people-fill text-slate-500"></i>
                 <span>Registre Personnel</span>
             </a>
+            @endhasanyrole
 
+            @role('SuperAdmin')
             <a href="{{ route('admin.tontines.index') }}"
             class="flex items-center px-4 py-2 space-x-3 text-sm transition rounded-xl {{ request()->routeIs('admin.tontines.*') ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
                 <i class="bi bi-layers-half text-slate-500"></i>
@@ -65,11 +63,9 @@
             </a>
             @endrole
 
-            <!-- PILOTAGE & MANAGEMENT -->
             @hasanyrole('SuperAdmin|PDG|DG|DAF')
             <div class="pt-4 pb-1 px-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">Pilotage & Management</div>
 
-            <!-- FLUX DES AGENCES -->
             <a href="{{ route('admin.structures.index') }}"
             class="flex items-center px-4 py-2 space-x-3 text-sm transition rounded-xl {{ request()->routeIs('admin.structures.*') ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
                 <i class="bi bi-bank"></i>
@@ -81,14 +77,12 @@
                 <span>Coffre-Fort Central</span>
             </a>
 
-            <!-- OBJECTIFS & SANCTIONS MANAGÉRILES -->
             <a href="{{ route('admin.objectives.index') }}"
             class="flex items-center px-4 py-2 space-x-3 text-sm transition rounded-xl {{ request()->routeIs('admin.objectives.*') || request()->routeIs('admin.sanctions.*') ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
                 <i class="bi bi-shield-check text-slate-500"></i>
                 <span>Objectifs & Sanctions</span>
             </a>
 
-            <!-- RAPPORTS DE PERFORMANCE INTERNE -->
             <a href="{{ route('admin.reports.index') }}"
             class="flex items-center px-4 py-2 space-x-3 text-sm transition rounded-xl {{ request()->routeIs('admin.reports.*') ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
                 <i class="bi bi-graph-up-arrow text-slate-500"></i>
@@ -96,11 +90,9 @@
             </a>
             @endhasanyrole
 
-            <!-- GESTION FINANCIÈRE & COMPTABILITÉ -->
-            @hasanyrole('SuperAdmin|DAF|Comptable|Caissier|Secretaire')
+            @hasanyrole('SuperAdmin|PDG|DG|DAF|Comptable|Caissier|Secretaire')
             <div class="pt-4 pb-1 px-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">Gestion Financière</div>
 
-            <!-- SUPERVISEUR COMPTABLE (SOLDE, GAINS ET PERTES GLOBALES) -->
             <a href="{{ route('admin.finances.index') }}"
             class="flex items-center px-4 py-2 space-x-3 text-sm transition rounded-xl {{ request()->routeIs('admin.finances.*') ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
                 <i class="bi bi-cash-stack text-slate-500"></i>
@@ -118,18 +110,15 @@
             </a>
             @endhasanyrole
 
-            <!-- OPÉRATIONS DE TERRAIN & CLIENTS -->
-            @hasanyrole('SuperAdmin|Collectrice|Commercial|Chef Commercial|Secretaire|Comptable')
+            @hasanyrole('SuperAdmin|PDG|DG|Collectrice|Commercial|Chef Commercial|Secretaire|Comptable')
             <div class="pt-4 pb-1 px-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">Opérations & Terrain</div>
 
-            <!-- GESTION DES CLIENTS -->
             <a href="{{ route('admin.clients.index') }}"
             class="flex items-center px-4 py-2 space-x-3 text-sm transition rounded-xl {{ request()->routeIs('admin.clients.*') ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
                 <i class="bi bi-people text-slate-500"></i>
                 <span>Gestion des Clients</span>
             </a>
 
-            <!-- BOUTIQUE / CATALOGUE PRODUITS -->
             <a href="{{ route('admin.shop.index') }}"
             class="flex items-center px-4 py-2 space-x-3 text-sm transition rounded-xl {{ request()->routeIs('admin.shop.*') ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
                 <i class="bi bi-cart4 text-slate-500"></i>
@@ -147,8 +136,7 @@
             </a>
             @endhasanyrole
 
-            <!-- CRÉDITS & MICRO-PRÊTS -->
-            @hasanyrole('SuperAdmin|AnalysteCredit|DG|DAF|Comptable|Secretaire')
+            @hasanyrole('SuperAdmin|PDG|DG|AnalysteCredit|DAF|Comptable|Secretaire')
             <div class="pt-4 pb-1 px-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">Crédits & Micro-Prêts</div>
 
             <a href="#" class="flex items-center px-4 py-2 space-x-3 text-sm transition rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white">
@@ -161,7 +149,6 @@
             </a>
             @endhasanyrole
 
-            <!-- SÉCURITÉ & LOGS -->
             @hasanyrole('SuperAdmin|Auditeur')
             <div class="pt-4 pb-1 px-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">Sécurité & Conformité</div>
 
@@ -177,7 +164,6 @@
         </nav>
     </div>
 
-    <!-- BLOC UTILISATEUR EN BAS -->
     <div class="flex items-center justify-between p-4 border-t border-slate-800 bg-slate-950/50">
         <div>
             <p class="text-xs font-bold text-white">{{ Auth::user()->name }}</p>

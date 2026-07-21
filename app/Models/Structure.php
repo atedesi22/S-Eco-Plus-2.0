@@ -3,12 +3,10 @@
 namespace App\Models;
 
 use App\Models\Structure;
-use App\Models\Tontine_plan;
 use App\Models\User;
+use App\Models\Zone;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Request;
 
 class Structure extends Model
 {
@@ -22,9 +20,26 @@ class Structure extends Model
      */
     protected $fillable = [
         'name',
-        'type',      // 'regional_direction' ou 'agency'
-        'parent_id',  // Si type = 'agency', parent_id pointe vers la Direction Régionale
+        'type',        // 'regional_direction' ou 'agency'
+        'parent_id',   // Si type = 'agency', pointe vers la Direction Régionale
+        'director_id', // Identifiant du Directeur de la structure
     ];
+
+    /**
+     * Relation avec le Directeur / Responsable de la structure.
+     */
+    public function director()
+    {
+        return $this->belongsTo(User::class, 'director_id');
+    }
+
+    /**
+     * Relation avec les Zones / Secteurs de collecte de l'agence.
+     */
+    public function zones()
+    {
+        return $this->hasMany(Zone::class, 'structure_id');
+    }
 
     /**
      * Relation Réflexive : Récupérer la structure parente (Ex: la Direction Régionale d'une Agence).
@@ -44,7 +59,6 @@ class Structure extends Model
 
     /**
      * Relation avec les Utilisateurs : Récupérer tout le personnel affecté à cette structure.
-     * (Directeur Régional, Directeur d'Agence, Comptable, Secrétaire, etc.)
      */
     public function users()
     {
@@ -52,8 +66,7 @@ class Structure extends Model
     }
 
     /**
-     * Un Scope local pour récupérer facilement uniquement les Directions Régionales.
-     * Utilisation dans le code : Structure::regionalDirections()->get();
+     * Scope local pour récupérer uniquement les Directions Régionales.
      */
     public function scopeRegionalDirections($query)
     {
@@ -61,8 +74,7 @@ class Structure extends Model
     }
 
     /**
-     * Un Scope local pour récupérer facilement uniquement les Agences.
-     * Utilisation dans le code : Structure::agencies()->get();
+     * Scope local pour récupérer uniquement les Agences.
      */
     public function scopeAgencies($query)
     {

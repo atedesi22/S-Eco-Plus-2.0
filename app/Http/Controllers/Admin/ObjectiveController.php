@@ -43,6 +43,7 @@ class ObjectiveController extends Controller
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'type' => 'required|in:new_tontines,product_sales,collecte_amount',
+            'period' => 'required|in:daily,weekly,monthly,quarterly,semesterly,yearly', // <--- 1. Validation ajoutée
             'target_value' => 'required|numeric|min:1',
             'start_date' => 'required|date',
             'end_date' => 'required|date|after_or_equal:start_date',
@@ -58,6 +59,7 @@ class ObjectiveController extends Controller
         Objective::create([
             'title' => $validated['title'],
             'type' => $validated['type'],
+            'period' => $validated['period'],
             'target_value' => $validated['target_value'],
             'start_date' => $validated['start_date'],
             'end_date' => $validated['end_date'],

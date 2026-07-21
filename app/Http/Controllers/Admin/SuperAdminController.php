@@ -65,6 +65,10 @@ class SuperAdminController extends Controller
 
         // 1. Nombre de comptes créés (Rôle client ou filtre générique)
         $accountsCount = User::where('created_at', '>=', $startDate)->count();
+        $clientsCount = User::role('Client')
+        // Si tu appliques un filtre de période :
+        ->where('created_at', [$startDate])
+        ->count();
 
         // 2. Volume Total des Transactions
         $totalTransactions = Transaction::where('created_at', '>=', $startDate)->sum('amount');
@@ -94,6 +98,7 @@ class SuperAdminController extends Controller
 
         return view('admin.dashboard', compact(
             'totalClients',
+            'clientsCount',
             'totalCommercials',
             'totalPlans',
             'staffMembers',

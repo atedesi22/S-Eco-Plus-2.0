@@ -5,9 +5,15 @@
 
     <div class="flex items-center justify-between">
         <div>
-            <h1 class="text-2xl font-black tracking-wide text-white">CONSOLE SUPERADMIN</h1>
-            <p class="text-xs text-slate-400">Vue d'ensemble du réseau structurel et du personnel de haut niveau</p>
+            <h1 class="text-2xl font-black tracking-wide text-white uppercase">
+                Espace {{ Auth::user()->getRoleNames()->first() ?? 'SUPERVISION' }}
+            </h1>
+
+            <p class="text-xs text-slate-400">
+                Bienvenue, <span class="font-semibold text-emerald-400">{{ Auth::user()->name }}</span> — Vue d'ensemble du réseau structurel et du personnel
+            </p>
         </div>
+
         <div class="text-xs bg-emerald-500/10 text-emerald-400 px-3 py-1.5 rounded-full font-mono font-bold border border-emerald-500/25 animate-pulse">
             <i class="mr-1 bi bi-shield-check"></i> Mode Sécurisé Actif
         </div>
@@ -56,103 +62,104 @@
     </div>
 
     <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        @hasanyrole('SuperAdmin')
+            <div class="p-5 space-y-4 border bg-slate-900 border-slate-800 rounded-xl">
+                <div class="flex items-center pb-3 space-x-2 border-b border-slate-800">
+                    <i class="text-lg text-indigo-400 bi bi-person-plus"></i>
+                    <h2 class="text-sm font-bold tracking-wider text-white uppercase">Nommer un Cadre ou Personnel</h2>
+                </div>
 
-        <div class="p-5 space-y-4 border bg-slate-900 border-slate-800 rounded-xl">
-            <div class="flex items-center pb-3 space-x-2 border-b border-slate-800">
-                <i class="text-lg text-indigo-400 bi bi-person-plus"></i>
-                <h2 class="text-sm font-bold tracking-wider text-white uppercase">Nommer un Cadre ou Personnel</h2>
+                <form action="{{ route('admin.staff.store') }}" method="POST" class="space-y-4">
+                    @csrf
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Nom Complet</label>
+                            <input type="text" name="name" placeholder="Ex: Jean Dupont" required class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-indigo-500">
+                        </div>
+                        <div>
+                            <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Adresse Email</label>
+                            <input type="email" name="email" required class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-indigo-500">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Rôle Affecté</label>
+                            <select name="role" required class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-indigo-500">
+                                <option value="" disabled selected>Sélectionner un rôle</option>
+                                <option value="PDG">PDG</option>
+                                <option value="DG">DG</option>
+                                <option value="DAF">DAF</option>
+                                <option value="DOM">DOM</option>
+                                <option value="Directeur Regional">Directeur Régional</option>
+                                <option value="Directeur Agence">Directeur d'Agence</option>
+                                <option value="Comptable">Comptable</option>
+                                <option value="Secretaire">Secretaire</option>
+                                <option value="Chef Commercial">Chef de Zone</option>
+                                <option value="Collectrice">Collectrice</option>
+                                <option value="Commercial">Commercial</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Supérieur Direct (Optionnel)</label>
+                            <select name="parent_id" class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-indigo-500">
+                                <option value="">Aucun (Sommet de la pyramide)</option>
+                                @foreach($superiors as $superior)
+                                    <option value="{{ $superior->id }}">
+                                        {{ $superior->name }} ({{ $superior->roles->first()?->name ?? 'Sans Rôle' }})
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Mot de passe initial</label>
+                        <input type="password" name="password" required class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-indigo-500">
+                    </div>
+
+                    <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 rounded-lg transition duration-200 shadow-lg shadow-indigo-600/20">
+                        Générer les accès sécurisés
+                    </button>
+                </form>
             </div>
 
-            <form action="{{ route('admin.staff.store') }}" method="POST" class="space-y-4">
-                @csrf
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Nom Complet</label>
-                        <input type="text" name="name" placeholder="Ex: Jean Dupont" required class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-indigo-500">
-                    </div>
-                    <div>
-                        <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Adresse Email</label>
-                        <input type="email" name="email" required class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-indigo-500">
-                    </div>
+            <div class="p-5 space-y-4 border bg-slate-900 border-slate-800 rounded-xl">
+                <div class="flex items-center pb-3 space-x-2 border-b border-slate-800">
+                    <i class="text-lg bi bi-patch-plus text-amber-400"></i>
+                    <h2 class="text-sm font-bold tracking-wider text-white uppercase">Créer un Produit de Tontine</h2>
                 </div>
 
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Rôle Affecté</label>
-                        <select name="role" required class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-indigo-500">
-                            <option value="" disabled selected>Sélectionner un rôle</option>
-                            <option value="PDG">PDG</option>
-                            <option value="DG">DG</option>
-                            <option value="DAF">DAF</option>
-                            <option value="DOM">DOM</option>
-                            <option value="Directeur Regional">Directeur Régional</option>
-                            <option value="Directeur Agence">Directeur d'Agence</option>
-                            <option value="Comptable">Comptable</option>
-                            <option value="Secretaire">Secretaire</option>
-                            <option value="Chef Commercial">Chef de Zone</option>
-                            <option value="Collectrice">Collectrice</option>
-                            <option value="Commercial">Commercial</option>
-                        </select>
+                <form action="{{ route('admin.tontines.store') }}" method="POST" class="space-y-4">
+                    @csrf
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Nom commercial</label>
+                            <input type="text" name="name" placeholder="Ex: S Eco Plus 2.0" required class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-amber-500">
+                        </div>
+                        <div>
+                            <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Couleur Identitaire</label>
+                            <select name="default_color" required class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-amber-500">
+                                <option value="emerald">Vert Émeraude</option>
+                                <option value="indigo">Bleu Indigo</option>
+                                <option value="amber">Orange Ambre</option>
+                                <option value="rose">Rouge Rose</option>
+                                <option value="purple">Violet Royal</option>
+                            </select>
+                        </div>
                     </div>
+
                     <div>
-                        <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Supérieur Direct (Optionnel)</label>
-                        <select name="parent_id" class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-indigo-500">
-                            <option value="">Aucun (Sommet de la pyramide)</option>
-                            @foreach($superiors as $superior)
-                                <option value="{{ $superior->id }}">
-                                    {{ $superior->name }} ({{ $superior->roles->first()?->name ?? 'Sans Rôle' }})
-                                </option>
-                            @endforeach
-                        </select>
+                        <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Description & Règles d'octroi</label>
+                        <textarea name="description" rows="3" placeholder="Spécifier les détails du plan pour les commerciaux de terrain..." class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-amber-500"></textarea>
                     </div>
-                </div>
 
-                <div>
-                    <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Mot de passe initial</label>
-                    <input type="password" name="password" required class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-indigo-500">
-                </div>
-
-                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 rounded-lg transition duration-200 shadow-lg shadow-indigo-600/20">
-                    Générer les accès sécurisés
-                </button>
-            </form>
-        </div>
-
-        <div class="p-5 space-y-4 border bg-slate-900 border-slate-800 rounded-xl">
-            <div class="flex items-center pb-3 space-x-2 border-b border-slate-800">
-                <i class="text-lg bi bi-patch-plus text-amber-400"></i>
-                <h2 class="text-sm font-bold tracking-wider text-white uppercase">Créer un Produit de Tontine</h2>
+                    <button type="submit" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs py-2.5 rounded-lg transition duration-200">
+                        Publier au catalogue central
+                    </button>
+                </form>
             </div>
-
-            <form action="{{ route('admin.tontines.store') }}" method="POST" class="space-y-4">
-                @csrf
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Nom commercial</label>
-                        <input type="text" name="name" placeholder="Ex: S Eco Plus 2.0" required class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-amber-500">
-                    </div>
-                    <div>
-                        <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Couleur Identitaire</label>
-                        <select name="default_color" required class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-amber-500">
-                            <option value="emerald">Vert Émeraude</option>
-                            <option value="indigo">Bleu Indigo</option>
-                            <option value="amber">Orange Ambre</option>
-                            <option value="rose">Rouge Rose</option>
-                            <option value="purple">Violet Royal</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div>
-                    <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Description & Règles d'octroi</label>
-                    <textarea name="description" rows="3" placeholder="Spécifier les détails du plan pour les commerciaux de terrain..." class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-amber-500"></textarea>
-                </div>
-
-                <button type="submit" class="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs py-2.5 rounded-lg transition duration-200">
-                    Publier au catalogue central
-                </button>
-            </form>
-        </div>
+        @endhasanyrole
     </div>
 
     <div class="p-5 border bg-slate-900 border-slate-800 rounded-xl">
@@ -233,7 +240,7 @@
                 <span class="text-[10px] uppercase font-bold tracking-wider">Nouveaux Comptes</span>
                 <i class="text-base bi bi-person-plus text-emerald-400"></i>
             </div>
-            <p class="font-mono text-2xl font-black text-white">{{ number_format($accountsCount) }}</p>
+            <p class="font-mono text-2xl font-black text-white">{{ number_format($clientsCount) }}</p>
             <p class="text-[10px] text-slate-500 italic">Comptes enregistrés sur la période</p>
         </div>
 

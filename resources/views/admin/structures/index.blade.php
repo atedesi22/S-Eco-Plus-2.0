@@ -59,8 +59,10 @@
                 <h2 class="text-sm font-bold tracking-wider text-white uppercase">Affecter un Commandement (Directeur)</h2>
             </div>
 
-            {{-- <form action="{{ route('admin.structures.assign-director') }}" method="POST" class="space-y-4">
+            <form action="{{ route('admin.structures.assign-director') }}" method="POST" class="space-y-4" x-data="{ targetType: 'regional_direction' }">
                 @csrf
+
+                <!-- 1. Sélection du Type de Structure -->
                 <div>
                     <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Type de structure à pourvoir</label>
                     <select x-model="targetType" class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-indigo-500">
@@ -69,32 +71,47 @@
                     </select>
                 </div>
 
+                <!-- 2. Sélection du Cadre Disponible -->
                 <div>
                     <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Cadre Disponible</label>
 
-                    <!-- Select DR -->
-                    <select name="user_id" x-show="targetType === 'regional_direction'" class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-indigo-500">
-                        <option value="">-- Choisir un Directeur Régional en attente --</option>
-                        @foreach($availableRegionalDirectors as $drUser)
-                            <option value="{{ $drUser->id }}">{{ $drUser->name }}</option>
-                        @endforeach
-                    </select>
+                    <!-- Select DR (Actif UNIQUEMENT si Direction Régionale) -->
+                    <div x-show="targetType === 'regional_direction'">
+                        <select name="user_id"
+                                :disabled="targetType !== 'regional_direction'"
+                                required
+                                class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-indigo-500">
+                            <option value="">-- Choisir un Directeur Régional en attente --</option>
+                            @foreach($availableRegionalDirectors as $drUser)
+                                <option value="{{ $drUser->id }}">{{ $drUser->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
 
-                    <!-- Select Agence -->
-                    <select name="user_id" x-show="targetType === 'agency'" class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-indigo-500" x-cloak>
-                        <option value="">-- Choisir un Directeur d'Agence en attente --</option>
-                        @foreach($availableAgencyDirectors as $daUser)
-                            <option value="{{ $daUser->id }}">{{ $daUser->name }}</option>
-                        @endforeach
-                    </select>
+                    <!-- Select Agence (Actif UNIQUEMENT si Agence) -->
+                    <div x-show="targetType === 'agency'" x-cloak>
+                        <select name="user_id"
+                                :disabled="targetType !== 'agency'"
+                                required
+                                class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-indigo-500">
+                            <option value="">-- Choisir un Directeur d'Agence en attente --</option>
+                            @foreach($availableAgencyDirectors as $daUser)
+                                <option value="{{ $daUser->id }}">{{ $daUser->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
                 </div>
 
+                <!-- 3. Sélection du Bureau Cible (Filtré dynamiquement selon le Type !) -->
                 <div>
                     <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Bureau Cible</label>
                     <select name="structure_id" required class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-indigo-500">
                         <option value="">-- Sélectionner l'infrastructure cible --</option>
                         @foreach($structures as $struct)
-                            <option value="{{ $struct->id }}">{{ $struct->name }} ({{ $struct->type === 'regional_direction' ? 'Région' : 'Agence' }})</option>
+                            {{-- Affiche uniquement les structures qui correspondent au type sélectionné --}}
+                            <option value="{{ $struct->id }}" x-show="targetType === '{{ $struct->type }}'">
+                                {{ $struct->name }} ({{ $struct->type === 'regional_direction' ? 'Région' : 'Agence' }})
+                            </option>
                         @endforeach
                     </select>
                 </div>
@@ -102,57 +119,7 @@
                 <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 rounded-lg transition duration-200">
                     Signer le décret d'affectation
                 </button>
-            </form> --}}
-
-            <form action="{{ route('admin.structures.assign-director') }}" method="POST" class="space-y-4">
-    @csrf
-    <div>
-        <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Type de structure à pourvoir</label>
-        <select x-model="targetType" class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-indigo-500">
-            <option value="regional_direction">Direction Régionale</option>
-            <option value="agency">Agence</option>
-        </select>
-    </div>
-
-    <div>
-        <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Cadre Disponible</label>
-
-        <select name="user_id"
-                x-show="targetType === 'regional_direction'"
-                :disabled="targetType !== 'regional_direction'"
-                class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-indigo-500">
-            <option value="">-- Choisir un Directeur Régional en attente --</option>
-            @foreach($availableRegionalDirectors as $drUser)
-                <option value="{{ $drUser->id }}">{{ $drUser->name }}</option>
-            @endforeach
-        </select>
-
-        <select name="user_id"
-                x-show="targetType === 'agency'"
-                :disabled="targetType !== 'agency'"
-                class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-indigo-500"
-                x-cloak>
-            <option value="">-- Choisir un Directeur d'Agence en attente --</option>
-            @foreach($availableAgencyDirectors as $daUser)
-                <option value="{{ $daUser->id }}">{{ $daUser->name }}</option>
-            @endforeach
-        </select>
-    </div>
-
-    <div>
-        <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Bureau Cible</label>
-        <select name="structure_id" required class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-indigo-500">
-            <option value="">-- Sélectionner l'infrastructure cible --</option>
-            @foreach($structures as $struct)
-                <option value="{{ $struct->id }}">{{ $struct->name }} ({{ $struct->type === 'regional_direction' ? 'Région' : 'Agence' }})</option>
-            @endforeach
-        </select>
-    </div>
-
-    <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 rounded-lg transition duration-200">
-        Signer le décret d'affectation
-    </button>
-</form>
+            </form>
         </div>
     </div>
     @endif
@@ -177,6 +144,7 @@
                 <tbody class="divide-y divide-slate-800/50">
                     @forelse($structures as $structure)
                     <tr>
+                        <!-- Nom de la Structure -->
                         <td class="flex items-center py-3 space-x-2 font-bold text-white">
                             @if($structure->type === 'regional_direction')
                                 <span class="w-2 h-2 rounded-full bg-sky-500"></span>
@@ -187,27 +155,28 @@
                             @endif
                             <span>{{ $structure->name }}</span>
                         </td>
-                        <td class="py-3 font-medium">
-                            {{ $structure->parent ? $structure->parent->name : 'Direction Générale (Holding)' }}
-                        </td>
-                        <td class="py-3 italic">
-                            @php
-                                // Trouver le manager ayant le rôle adéquat rattaché à cette structure
-                                $manager = $structure->users->filter(function($u) use ($structure) {
-                                    return $structure->type === 'regional_direction'
-                                        ? $u->hasRole('Directeur Regional')
-                                        : $u->hasRole('Directeur Agence');
-                                })->first();
-                            @endphp
 
-                            @if($manager)
-                                <span class="not-italic font-bold text-white"><i class="mr-1 bi bi-person-check-fill text-emerald-400"></i>{{ $manager->name }}</span>
+                        <!-- Structure Parente -->
+                        <td class="py-3 font-medium text-slate-300">
+                            {{ $structure->parent->name ?? 'Direction Générale (Holding)' }}
+                        </td>
+
+                        <!-- Responsable / Directeur -->
+                        <td class="py-3 italic">
+                            @if($structure->director)
+                                <span class="not-italic font-bold text-white">
+                                    <i class="mr-1 bi bi-person-check-fill text-emerald-400"></i>{{ $structure->director->name }}
+                                </span>
                             @else
-                                <span class="text-rose-500/70 font-bold text-[10px] uppercase tracking-wide bg-rose-500/5 border border-rose-500/10 px-2 py-0.5 rounded">Poste Vacant</span>
+                                <span class="text-rose-500/70 font-bold text-[10px] uppercase tracking-wide bg-rose-500/5 border border-rose-500/10 px-2 py-0.5 rounded">
+                                    Poste Vacant
+                                </span>
                             @endif
                         </td>
+
+                        <!-- Nombre d'agents -->
                         <td class="py-3 font-mono font-bold text-center text-slate-300">
-                            {{ $structure->users->count() }} agents
+                            {{ $structure->users_count ?? $structure->users->count() }} agents
                         </td>
                     </tr>
                     @empty
@@ -220,6 +189,71 @@
                 </tbody>
             </table>
         </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-6">
+        @forelse($agencies as $agency)
+            <div class="p-6 space-y-6 border bg-slate-900 border-slate-800 rounded-2xl">
+
+                <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+                    <div class="flex items-center space-x-3">
+                        <div class="flex items-center justify-center w-10 h-10 font-bold border rounded-xl bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                            <i class="text-xl bi bi-bank"></i>
+                        </div>
+                        <div>
+                            <h3 class="text-base font-bold text-white">{{ $agency->name }}</h3>
+                            <p class="font-mono text-xs text-slate-400">
+                                Directeur : <strong class="text-slate-200">{{ $agency->director->name ?? 'Non assigné' }}</strong>
+                            </p>
+                        </div>
+                    </div>
+
+                    <button @click="openZoneModal = true; selectedAgencyId = {{ $agency->id }}"
+                            class="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold transition flex items-center space-x-1.5">
+                        <i class="bi bi-plus-lg"></i>
+                        <span>Nouvelle Zone</span>
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    @forelse($agency->zones as $zone)
+                        <div class="p-4 space-y-3 transition border bg-slate-950 border-slate-800/80 rounded-xl hover:border-slate-700">
+                            <div class="flex items-center justify-between pb-2 border-b border-slate-800/60">
+                                <div class="flex items-center space-x-2">
+                                    <span class="px-2 py-0.5 bg-slate-800 text-slate-300 rounded text-[10px] font-mono font-bold">{{ $zone->code }}</span>
+                                    <h4 class="text-sm font-bold text-white">{{ $zone->name }}</h4>
+                                </div>
+                                <span class="w-2 h-2 rounded-full {{ $zone->is_active ? 'bg-emerald-400' : 'bg-rose-500' }}"></span>
+                            </div>
+
+                            <div class="text-xs space-y-1.5 text-slate-400">
+                                <p class="flex justify-between">
+                                    <span>Chef Commercial :</span>
+                                    <strong class="text-white">{{ $zone->manager->name ?? 'Aucun' }}</strong>
+                                </p>
+                                <p class="flex justify-between">
+                                    <span>Agents Terrain :</span>
+                                    <strong class="font-mono text-emerald-400">{{ $zone->agents_count }} agents</strong>
+                                </p>
+                                <p class="flex justify-between">
+                                    <span>Clients Rattachés :</span>
+                                    <strong class="font-mono text-white">{{ $zone->clients_count }} clients</strong>
+                                </p>
+                            </div>
+                        </div>
+                    @empty
+                        <div class="py-6 text-xs italic text-center border border-dashed col-span-full text-slate-500 bg-slate-950/40 rounded-xl border-slate-800">
+                            Aucune zone de collecte configurée pour cette agence.
+                        </div>
+                    @endforelse
+                </div>
+
+            </div>
+        @empty
+            <div class="p-8 text-sm text-center border bg-slate-900 border-slate-800 rounded-2xl text-slate-400">
+                Aucune agence / structure enregistrée pour le moment.
+            </div>
+        @endforelse
     </div>
 </div>
 @endsection
