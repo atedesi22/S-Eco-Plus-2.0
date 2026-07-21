@@ -4,7 +4,9 @@ namespace App\Services;
 
 use App\Models\Account;
 use App\Models\Audit;
+use App\Models\CustomerTontine;
 use App\Models\Transaction;
+use App\Models\User;
 use Exception;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -144,4 +146,46 @@ class TransactionService
             'user_agent' => request()->userAgent() ?? 'POS-Terminal',
         ]);
     }
-}
+
+    // Extrait de code à intégrer dans la fonction de création de transaction (Ex: TransactionController ou TransactionService)
+    public function processDeposit(User $client, $amount, $performedBy)
+    {
+        // Vérifier s'il y a un emprunt actif hors délai
+        $overdueEmprunt = CustomerTontine::where('user_id', $client->id)
+            ->where('is_active', true)
+            ->where('deadline_date', '<', now())
+            ->whereColumn('amount_reimbursed', '<', 'amount_to_reimburse')
+            ->first();
+
+        if ($overdueEmprunt) {
+            $remainingDebt = $overdueEmprunt->amount_to_reimburse - $overdueEmprunt->amount_reimbursed;
+
+            // Calcul du montant affectable au remboursement
+            $paymentToApply = min($amount, $remainingDebt);
+
+            // Appliquer le remboursement
+            $overdueEmprunt->increment('amount_reimbursed', $paymentToApply);
+
+            // Enregistrer l'écriture dans le Grand Livre comme remboursement d'emprunt forcé
+            Transaction::create([
+                'user_id' => $client->id,
+                'amount' => $paymentToApply,
+                'type' => 'remboursement_emprunt_force',
+                'performed_by' => $performedBy,
+            ]);
+
+            // Si l'emprunt est totalement soldé suite à ce paiement : Suppression/Désactivation automatique
+            if ($overdueEmprunt->fresh()->amount_reimbursed >= $overdueEmprunt->amount_to_reimburse) {
+                $overdueEmprunt->delete(); // Suppression ou passage à is_active = false
+            }
+
+            // S'il reste un résidu de l'argent déposé après avoir soldé la dette, le reste va sur son compte normal
+            $leftover = $amount - $paymentToApply;
+            if ($leftover > 0) {
+                // Continuer le dépôt standard pour le montant '$leftover'
+            }
+        } else {
+            // Traitement normal de la transaction standard
+        }
+    }
+    }

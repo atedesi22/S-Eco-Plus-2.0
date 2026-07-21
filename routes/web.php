@@ -68,6 +68,9 @@ Route::middleware(['auth'])->group(function () {
         // Accessible uniquement au SuperAdmin pour la config de base
         Route::middleware(['role:SuperAdmin'])->group(function () {
             Route::get('/dashboard', [SuperAdminController::class, 'dashboard'])->name('dashboard');
+            // Fiche Profil Détaillée de l'utilisateur (Collaborateur ou Client)
+            Route::get('/users/{id}/profile', [SuperAdminController::class, 'showProfile'])->name('users.profile');
+
 
             // 2. Gestion complète du Staff (Création, Affichage, État)
             Route::get('/staff', [SuperAdminController::class, 'staffIndex'])->name('staff.index');

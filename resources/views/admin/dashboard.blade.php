@@ -20,7 +20,7 @@
             </div>
             <div>
                 <p class="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Directions Reg.</p>
-                <h3 class="text-xl font-black text-white">4</h3> {{-- Remplacer par $totalRegions dynamiquement --}}
+                <h3 class="text-xl font-black text-white">{{ $totalRegions }}</h3>
             </div>
         </div>
 
@@ -30,7 +30,7 @@
             </div>
             <div>
                 <p class="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Agences</p>
-                <h3 class="text-xl font-black text-white">12</h3> {{-- Remplacer par $totalAgencies --}}
+                <h3 class="text-xl font-black text-white">{{ $totalAgencies }}</h3>
             </div>
         </div>
 
@@ -68,7 +68,7 @@
                 <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Nom Complet</label>
-                        <input type="text" name="name" required class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-indigo-500">
+                        <input type="text" name="name" placeholder="Ex: Jean Dupont" required class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-indigo-500">
                     </div>
                     <div>
                         <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Adresse Email</label>
@@ -80,19 +80,29 @@
                     <div>
                         <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Rôle Affecté</label>
                         <select name="role" required class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-indigo-500">
+                            <option value="" disabled selected>Sélectionner un rôle</option>
                             <option value="PDG">PDG</option>
                             <option value="DG">DG</option>
                             <option value="DAF">DAF</option>
                             <option value="DOM">DOM</option>
                             <option value="Directeur Regional">Directeur Régional</option>
                             <option value="Directeur Agence">Directeur d'Agence</option>
+                            <option value="Comptable">Comptable</option>
+                            <option value="Secretaire">Secretaire</option>
+                            <option value="Chef Commercial">Chef de Zone</option>
+                            <option value="Collectrice">Collectrice</option>
+                            <option value="Commercial">Commercial</option>
                         </select>
                     </div>
                     <div>
                         <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Supérieur Direct (Optionnel)</label>
                         <select name="parent_id" class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-indigo-500">
                             <option value="">Aucun (Sommet de la pyramide)</option>
-                            {{-- Boucle dynamique sur les responsables existants --}}
+                            @foreach($superiors as $superior)
+                                <option value="{{ $superior->id }}">
+                                    {{ $superior->name }} ({{ $superior->roles->first()?->name ?? 'Sans Rôle' }})
+                                </option>
+                            @endforeach
                         </select>
                     </div>
                 </div>
@@ -102,7 +112,7 @@
                     <input type="password" name="password" required class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-indigo-500">
                 </div>
 
-                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 rounded-lg transition duration-200">
+                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 rounded-lg transition duration-200 shadow-lg shadow-indigo-600/20">
                     Générer les accès sécurisés
                 </button>
             </form>

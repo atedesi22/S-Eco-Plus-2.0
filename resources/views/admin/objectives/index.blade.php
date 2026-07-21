@@ -43,8 +43,11 @@
                     @endphp
                     <tr class="transition hover:bg-slate-950/40">
                         <td class="p-4">
-                            <div class="font-bold text-white">{{ $obj->user->name }}</div>
-                            <div class="text-[10px] text-slate-500 font-mono">ID: #{{ $obj->user_id }}</div>
+                            <!-- Lien vers la fiche de profil détaillée -->
+                            <a href="{{ route('admin.users.profile', $obj->user_id) }}" class="block group">
+                                <div class="font-bold text-white transition group-hover:text-emerald-400">{{ $obj->user->name }}</div>
+                                <div class="text-[10px] text-slate-500 font-mono group-hover:text-slate-400 transition">ID: #{{ $obj->user_id }} (Voir profil)</div>
+                            </a>
                         </td>
                         <td class="p-4">
                             <div class="font-medium text-slate-200">{{ $obj->title }}</div>
@@ -115,8 +118,31 @@
                 </div>
                 <div class="grid grid-cols-2 gap-3">
                     <div>
+                        <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Cible Individuelle</label>
+                        <select name="user_id" class="w-full px-3 py-2 text-xs text-white border bg-slate-950 border-slate-800 rounded-xl">
+                            <option value="">-- Aucun (Sélectionner Rôle) --</option>
+                            @foreach($staffMembers as $staff)
+                                <option value="{{ $staff->id }}">{{ $staff->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Cible Groupée (Par Rôle)</label>
+                        <select name="role_name" class="w-full px-3 py-2 text-xs text-white border bg-slate-950 border-slate-800 rounded-xl">
+                            <option value="">-- Aucun (Sélectionner Individu) --</option>
+                            <option value="Commercial">Tous les Commerciaux</option>
+                            <option value="Chef Commercial">Tous les Chefs de Zone</option>
+                            <option value="Collectrice">Toutes les Collectrices</option>
+                        </select>
+                    </div>
+                    <div>
                         <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Type de Métrique</label>
-                        <input type="text" name="type" placeholder="Ex: volume_tontine" required class="w-full px-3 py-2 text-sm text-white border bg-slate-950 border-slate-800 rounded-xl focus:outline-none focus:border-emerald-500">
+                        <select name="type" class="w-full px-3 py-2 text-sm text-white border bg-slate-950 border-slate-800 rounded-xl focus:outline-none focus:border-emerald-500">
+                            <option value="collecte_amount">Volume Tontine (Collecte)</option>
+                            <option value="new_accounts">Nouveaux Comptes</option>
+                            <option value="product_sales">Ventes de Produits</option>
+                            <option value="credit_recovery">Recouvrement de Crédit</option>
+                        </select>
                     </div>
                     <div>
                         <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Valeur cible</label>
@@ -126,12 +152,12 @@
                 <div>
                     <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Fréquence / Période</label>
                     <select name="period" class="w-full px-3 py-2 text-sm text-white border bg-slate-950 border-slate-800 rounded-xl focus:outline-none focus:border-emerald-500">
-                        <option value="day">Journalier</option>
-                        <option value="week">Hebdomadaire</option>
-                        <option value="month" selected>Mensuel</option>
-                        <option value="quarter">Trimestriel</option>
-                        <option value="semester">Semestriel</option>
-                        <option value="year">Annuel</option>
+                        <option value="daily">Journalier</option>
+                        <option value="weekly">Hebdomadaire</option>
+                        <option value="monthly" selected>Mensuel</option>
+                        <option value="quarterly">Trimestriel</option>
+                        <option value="semesterly">Semestriel</option>
+                        <option value="yearly">Annuel</option>
                     </select>
                 </div>
                 <div class="grid grid-cols-2 gap-3">
@@ -166,9 +192,10 @@
                     <div>
                         <label class="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">Gravité</label>
                         <select name="severity" class="w-full px-3 py-2 text-sm text-white border bg-slate-950 border-slate-800 rounded-xl focus:outline-none focus:border-rose-500">
-                            <option value="low">Faible (Avertissement)</option>
-                            <option value="medium" selected>Modérée</option>
-                            <option value="high">Critique (Mise à pied / Suspension)</option>
+                            <option value="warning">Avertissement Simple</option>
+                            <option value="financial_penalty">Pénalité Financière (Retenue)</option>
+                            <option value="suspension">Suspension / Mise à pied</option>
+                            <option value="dismissal">Licenciement Définitif</option>
                         </select>
                     </div>
                     <div>

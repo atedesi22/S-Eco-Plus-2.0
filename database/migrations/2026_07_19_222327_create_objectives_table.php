@@ -13,7 +13,8 @@ return new class extends Migration
     {
         Schema::create('objectives', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->constrained()->onDelete('cascade'); // L'employé concerné
+            $table->foreignId('user_id')->constrained()->onDelete('cascade')->nullable(); // L'employé concerné
+            $table->string('role_name')->nullable();
             $table->string('title'); // Ex: Collecte mensuelle, Nouveaux comptes...
             $table->enum('type', ['collecte_amount', 'new_accounts', 'product_sales', 'credit_recovery']);
 

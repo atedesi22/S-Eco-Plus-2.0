@@ -33,6 +33,7 @@
                                 {{ $agent->roles->first()?->name ?? 'Aucun rôle' }}
                             </span>
                         </td>
+
                         <td class="py-3.5 font-medium text-slate-300">
                             {{ $agent->structure ? $agent->structure->name : 'Non assigné (Siège Central)' }}
                         </td>

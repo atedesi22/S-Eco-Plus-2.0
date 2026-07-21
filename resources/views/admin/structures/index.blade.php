@@ -59,7 +59,7 @@
                 <h2 class="text-sm font-bold tracking-wider text-white uppercase">Affecter un Commandement (Directeur)</h2>
             </div>
 
-            <form action="{{ route('admin.structures.assign-director') }}" method="POST" class="space-y-4">
+            {{-- <form action="{{ route('admin.structures.assign-director') }}" method="POST" class="space-y-4">
                 @csrf
                 <div>
                     <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Type de structure à pourvoir</label>
@@ -102,7 +102,57 @@
                 <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 rounded-lg transition duration-200">
                     Signer le décret d'affectation
                 </button>
-            </form>
+            </form> --}}
+
+            <form action="{{ route('admin.structures.assign-director') }}" method="POST" class="space-y-4">
+    @csrf
+    <div>
+        <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Type de structure à pourvoir</label>
+        <select x-model="targetType" class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-indigo-500">
+            <option value="regional_direction">Direction Régionale</option>
+            <option value="agency">Agence</option>
+        </select>
+    </div>
+
+    <div>
+        <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Cadre Disponible</label>
+
+        <select name="user_id"
+                x-show="targetType === 'regional_direction'"
+                :disabled="targetType !== 'regional_direction'"
+                class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-indigo-500">
+            <option value="">-- Choisir un Directeur Régional en attente --</option>
+            @foreach($availableRegionalDirectors as $drUser)
+                <option value="{{ $drUser->id }}">{{ $drUser->name }}</option>
+            @endforeach
+        </select>
+
+        <select name="user_id"
+                x-show="targetType === 'agency'"
+                :disabled="targetType !== 'agency'"
+                class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-indigo-500"
+                x-cloak>
+            <option value="">-- Choisir un Directeur d'Agence en attente --</option>
+            @foreach($availableAgencyDirectors as $daUser)
+                <option value="{{ $daUser->id }}">{{ $daUser->name }}</option>
+            @endforeach
+        </select>
+    </div>
+
+    <div>
+        <label class="text-[10px] uppercase font-bold text-slate-400 block mb-1">Bureau Cible</label>
+        <select name="structure_id" required class="w-full px-3 py-2 text-xs text-white border rounded-lg bg-slate-950 border-slate-800 focus:outline-none focus:border-indigo-500">
+            <option value="">-- Sélectionner l'infrastructure cible --</option>
+            @foreach($structures as $struct)
+                <option value="{{ $struct->id }}">{{ $struct->name }} ({{ $struct->type === 'regional_direction' ? 'Région' : 'Agence' }})</option>
+            @endforeach
+        </select>
+    </div>
+
+    <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs py-2.5 rounded-lg transition duration-200">
+        Signer le décret d'affectation
+    </button>
+</form>
         </div>
     </div>
     @endif

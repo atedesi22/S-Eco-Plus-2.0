@@ -324,4 +324,23 @@ class SuperAdminController extends Controller
 
         return redirect()->back()->with('success', "Le mot de passe de l'agent a été réinitialisé à '0000'.");
     }
+
+    public function showProfile($id)
+    {
+        // Chargement complet du profil avec son historique managérial et financier
+        $user = User::with([
+            'objectives',
+            'sanctions.objective',
+        ])->findOrFail($id);
+
+        // Si tu as un modèle Transaction lié à l'utilisateur, on récupère les 10 dernières
+        // Sinon, on initialise une collection vide pour éviter les erreurs Blade
+        $transactions = class_exists(\App\Models\Transaction::class)
+            ? \App\Models\Transaction::where('performed_by', $id)->orderBy('created_at', 'desc')->take(10)->get()
+            : collect();
+
+        return view('admin.modules.user-profile', compact('user', 'transactions'));
+    }
 }
+
+
