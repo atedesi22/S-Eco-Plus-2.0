@@ -15,6 +15,10 @@ class StructureController extends Controller
     public function index()
     {
         // dd(User::role('Directeur Agence')->get());
+
+        // Récupère uniquement le personnel ayant le rôle 'Chef Commercial'
+        $commercials = User::role('Chef Commercial')->get();
+
         // Chargement des agences avec leur directeur et leurs zones rattachées
         $structures = Structure::with(['director', 'zones.manager', 'zones.agents'])
             ->withCount(['users'])
@@ -52,7 +56,8 @@ class StructureController extends Controller
             'agencies',
             'regionalDirections',
             'availableRegionalDirectors',
-            'availableAgencyDirectors'
+            'availableAgencyDirectors',
+            'commercials',
         ));
     }
 

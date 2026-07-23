@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\CheckClientDues;
+use App\Http\Middleware\EnsureUserBelongsToAgency;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -20,6 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => \Spatie\Permission\Middleware\PermissionMiddleware::class,
             'role_or_permission' => \Spatie\Permission\Middleware\RoleOrPermissionMiddleware::class,
             'checkClientDues' => CheckClientDues::class,
+            'agency.scope' => EnsureUserBelongsToAgency::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

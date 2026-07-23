@@ -66,13 +66,13 @@ class RoleAndPermissionSeeder extends Seeder
 
         // 5. Création de VOTRE compte SuperAdmin par défaut pour le développement
         $superAdminUser = User::updateOrCreate(
-    ['email' => 'di@secoplus.com'],
-    [
-        'name' => 'Directeur Informatique',
-        'phone' => '677000000', // Ajout d'un numéro de test (Format Cameroun)
-        'password' => Hash::make('password!'),
-        'email_verified_at' => now(),
-    ]);
+            ['email' => 'di@secoplus.com'],
+            [
+                'name' => 'Directeur Informatique',
+                'phone' => '677000000', // Ajout d'un numéro de test (Format Cameroun)
+                'password' => Hash::make('password!'),
+                'email_verified_at' => now(),
+            ]);
 
         // Attribuer le rôle de SuperAdmin à cet utilisateur
         $superAdminUser->assignRole($superAdminRole);

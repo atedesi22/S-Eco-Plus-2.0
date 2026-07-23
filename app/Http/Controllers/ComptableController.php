@@ -16,11 +16,11 @@ class ComptableController extends Controller
 
         // Chiffres clés de l'agence du comptable
         $totalBalance = Account::whereHas('user', function($query) use ($agencyId) {
-            $query->where('agency_id', $agencyId);
+            $query->where('structure_id', $agencyId);
         })->sum('balance');
 
         $totalReserve = Account::whereHas('user', function($query) use ($agencyId) {
-            $query->where('agency_id', $agencyId);
+            $query->where('structure_id', $agencyId);
         })->sum('reserve_fund');
 
         return view('dashboard', compact('totalBalance', 'totalReserve'));

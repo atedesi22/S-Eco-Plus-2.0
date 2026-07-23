@@ -191,69 +191,176 @@
         </div>
     </div>
 
-    <div class="grid grid-cols-1 gap-6">
-        @forelse($agencies as $agency)
-            <div class="p-6 space-y-6 border bg-slate-900 border-slate-800 rounded-2xl">
+    <div x-data="{
+        search: '',
+        typeFilter: 'all',
 
-                <div class="flex items-center justify-between pb-4 border-b border-slate-800">
-                    <div class="flex items-center space-x-3">
-                        <div class="flex items-center justify-center w-10 h-10 font-bold border rounded-xl bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
-                            <i class="text-xl bi bi-bank"></i>
+        // Fonction de vérification si une agence ou ses zones correspondent à la recherche
+        matchesAgency(agencyName, directorName, zones) {
+            if (!this.search.trim()) return true;
+            const q = this.search.toLowerCase();
+
+            // Match sur le nom d'agence ou le directeur
+            const agencyMatch = agencyName.toLowerCase().includes(q) || (directorName && directorName.toLowerCase().includes(q));
+            if (agencyMatch) return true;
+
+            // Match sur le code ou le nom d'une des zones rattachées
+            return zones.some(z =>
+                z.name.toLowerCase().includes(q) ||
+                z.code.toLowerCase().includes(q) ||
+                (z.manager_name && z.manager_name.toLowerCase().includes(q))
+            );
+        },
+
+        matchesZone(zone) {
+            if (!this.search.trim()) return true;
+            const q = this.search.toLowerCase();
+            return zone.name.toLowerCase().includes(q) ||
+                zone.code.toLowerCase().includes(q) ||
+                (zone.manager_name && zone.manager_name.toLowerCase().includes(q));
+        }
+    }" class="space-y-6">
+
+        <!-- ========================================== -->
+        <!-- BARRE DE RECHERCHE & FILTRES EN TEMPS RÉEL -->
+        <!-- ========================================== -->
+        <div class="flex flex-col items-center justify-between gap-4 p-4 border bg-slate-900 border-slate-800 rounded-2xl md:flex-row">
+
+            <!-- Champ de Recherche Principal -->
+            <div class="relative w-full md:w-1/2">
+                <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-500">
+                    <i class="text-sm bi bi-search"></i>
+                </span>
+                <input
+                    type="text"
+                    x-model="search"
+                    placeholder="Rechercher une agence, un code zone (ex: ZN-AKW), un chef de zone..."
+                    class="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition"
+                >
+                <!-- Bouton pour effacer rapidement la recherche -->
+                <button
+                    x-show="search.length > 0"
+                    @click="search = ''"
+                    class="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-500 hover:text-white"
+                >
+                    <i class="text-xs bi bi-x-circle-fill"></i>
+                </button>
+            </div>
+
+            <!-- Filtre par Type & Compteur Réactif -->
+            <div class="flex items-center justify-between w-full space-x-3 md:w-auto md:justify-end">
+                <!-- Select Type de Structure -->
+                <div class="flex items-center space-x-2">
+                    <label class="text-xs font-medium text-slate-400">Type :</label>
+                    <select
+                        x-model="typeFilter"
+                        class="px-3 py-2 text-xs text-white border bg-slate-950 border-slate-800 rounded-xl focus:outline-none focus:border-emerald-500"
+                    >
+                        <option value="all">Toutes les structures</option>
+                        <option value="regional_direction">Directions Régionales</option>
+                        <option value="agency">Agences Uniquement</option>
+                    </select>
+                </div>
+
+                <!-- Badge d'information -->
+                <span class="px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] font-mono rounded-lg">
+                    Filtre actif
+                </span>
+            </div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- LISTE DES AGENCES ET LEURS ZONES DE COLLECTE -->
+        <!-- ========================================== -->
+        <div class="grid grid-cols-1 gap-6">
+            @foreach($structures as $agency)
+                @php
+                    // Préparation des données JSON des zones pour Alpine.js
+                    $zonesData = $agency->zones->map(function($z) {
+                        return [
+                            'id' => $z->id,
+                            'name' => $z->name,
+                            'code' => $z->code,
+                            'manager_name' => $z->manager->name ?? ''
+                        ];
+                    });
+                @endphp
+
+                <!-- Carte Agence (Masquée si elle ne correspond pas au filtre) -->
+                <div
+                    x-show="(typeFilter === 'all' || typeFilter === '{{ $agency->type }}') && matchesAgency('{{ addslashes($agency->name) }}', '{{ addslashes($agency->director->name ?? '') }}', {{ json_encode($zonesData) }})"
+                    x-transition:enter="transition ease-out duration-200"
+                    x-transition:enter-start="opacity-0 scale-95"
+                    x-transition:enter-end="opacity-100 scale-100"
+                    class="p-6 space-y-6 border bg-slate-900 border-slate-800 rounded-2xl"
+                >
+                    <!-- En-tête Agence -->
+                    <div class="flex items-center justify-between pb-4 border-b border-slate-800/80">
+                        <div class="flex items-center space-x-3">
+                            <div class="flex items-center justify-center w-10 h-10 font-bold border rounded-xl bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                                <i class="text-xl bi bi-bank"></i>
+                            </div>
+                            <div>
+                                <div class="flex items-center space-x-2">
+                                    <h3 class="text-base font-bold text-white">{{ $agency->name }}</h3>
+                                    <span class="px-2 py-0.5 bg-slate-800 text-slate-400 rounded text-[10px] uppercase font-mono font-bold">
+                                        {{ $agency->type === 'regional_direction' ? 'Dir. Régionale' : 'Agence' }}
+                                    </span>
+                                </div>
+                                <p class="text-xs text-slate-400 font-mono mt-0.5">Directeur : <strong class="text-slate-200">{{ $agency->director->name ?? 'Non assigné' }}</strong></p>
+                            </div>
                         </div>
-                        <div>
-                            <h3 class="text-base font-bold text-white">{{ $agency->name }}</h3>
-                            <p class="font-mono text-xs text-slate-400">
-                                Directeur : <strong class="text-slate-200">{{ $agency->director->name ?? 'Non assigné' }}</strong>
-                            </p>
-                        </div>
+
+                        @hasanyrole('SuperAdmin|Directeur Agence')
+
+                            <!-- Bouton Créer une zone -->
+                            <button @click="openZoneModal = true; selectedAgency = {{ $agency->id }}" class="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold transition flex items-center space-x-1.5">
+                                <i class="bi bi-plus-lg"></i>
+                                <span>Nouvelle Zone</span>
+                            </button>
+                        @endhasanyrole
                     </div>
 
-                    <button @click="openZoneModal = true; selectedAgencyId = {{ $agency->id }}"
-                            class="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold transition flex items-center space-x-1.5">
-                        <i class="bi bi-plus-lg"></i>
-                        <span>Nouvelle Zone</span>
-                    </button>
-                </div>
+                    <!-- Grille des Zones de cette Agence -->
+                    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        @forelse($agency->zones as $zone)
+                            <!-- Carte Zone (Mise en valeur si elle matche directement la recherche) -->
+                            <div
+                                x-show="matchesZone({ name: '{{ addslashes($zone->name) }}', code: '{{ addslashes($zone->code) }}', manager_name: '{{ addslashes($zone->manager->name ?? '') }}' })"
+                                class="p-4 space-y-3 transition border bg-slate-950 border-slate-800/80 rounded-xl hover:border-emerald-500/40 group"
+                            >
+                                <a href="{{ route('admin.zones.show', $zone->id) }}" class="flex items-center justify-between pb-2 border-b border-slate-800/60">
+                                    <div class="flex items-center space-x-2">
+                                        <span class="px-2 py-0.5 bg-slate-800 text-slate-300 group-hover:bg-emerald-500/20 group-hover:text-emerald-400 rounded text-[10px] font-mono font-bold transition">
+                                            {{ $zone->code }}
+                                        </span>
+                                        <h4 class="text-sm font-bold text-white transition group-hover:text-emerald-400">{{ $zone->name }}</h4>
+                                    </div>
+                                    <i class="text-xs transition bi bi-chevron-right text-slate-500 group-hover:text-emerald-400"></i>
+                                </a>
 
-                <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    @forelse($agency->zones as $zone)
-                        <div class="p-4 space-y-3 transition border bg-slate-950 border-slate-800/80 rounded-xl hover:border-slate-700">
-                            <div class="flex items-center justify-between pb-2 border-b border-slate-800/60">
-                                <div class="flex items-center space-x-2">
-                                    <span class="px-2 py-0.5 bg-slate-800 text-slate-300 rounded text-[10px] font-mono font-bold">{{ $zone->code }}</span>
-                                    <h4 class="text-sm font-bold text-white">{{ $zone->name }}</h4>
+                                <!-- Infos synthétiques -->
+                                <div class="text-xs space-y-1.5 text-slate-400">
+                                    <p class="flex justify-between">
+                                        <span>Chef de zone :</span>
+                                        <strong class="text-white">{{ $zone->manager->name ?? 'Non assigné' }}</strong>
+                                    </p>
+                                    <p class="flex justify-between">
+                                        <span>Agents terrain :</span>
+                                        <strong class="font-mono text-emerald-400">{{ $zone->agents->count() }} agents</strong>
+                                    </p>
                                 </div>
-                                <span class="w-2 h-2 rounded-full {{ $zone->is_active ? 'bg-emerald-400' : 'bg-rose-500' }}"></span>
                             </div>
-
-                            <div class="text-xs space-y-1.5 text-slate-400">
-                                <p class="flex justify-between">
-                                    <span>Chef Commercial :</span>
-                                    <strong class="text-white">{{ $zone->manager->name ?? 'Aucun' }}</strong>
-                                </p>
-                                <p class="flex justify-between">
-                                    <span>Agents Terrain :</span>
-                                    <strong class="font-mono text-emerald-400">{{ $zone->agents_count }} agents</strong>
-                                </p>
-                                <p class="flex justify-between">
-                                    <span>Clients Rattachés :</span>
-                                    <strong class="font-mono text-white">{{ $zone->clients_count }} clients</strong>
-                                </p>
+                        @empty
+                            <div class="py-4 text-xs italic text-center border border-dashed col-span-full text-slate-500 bg-slate-950/40 rounded-xl border-slate-800">
+                                Aucune zone de collecte configurée.
                             </div>
-                        </div>
-                    @empty
-                        <div class="py-6 text-xs italic text-center border border-dashed col-span-full text-slate-500 bg-slate-950/40 rounded-xl border-slate-800">
-                            Aucune zone de collecte configurée pour cette agence.
-                        </div>
-                    @endforelse
+                        @endforelse
+                    </div>
                 </div>
+            @endforeach
+        </div>
 
-            </div>
-        @empty
-            <div class="p-8 text-sm text-center border bg-slate-900 border-slate-800 rounded-2xl text-slate-400">
-                Aucune agence / structure enregistrée pour le moment.
-            </div>
-        @endforelse
     </div>
 </div>
 @endsection

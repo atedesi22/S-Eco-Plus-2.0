@@ -6,9 +6,11 @@ use App\Http\Controllers\Admin\StructureController;
 use App\Http\Controllers\Admin\SuperAdminController;
 use App\Http\Controllers\Admin\ZoneController;
 use App\Http\Controllers\ClientController;
+use App\Http\Controllers\Comptabilite\ComptableDashboardController;
 use App\Http\Controllers\ComptableController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\Secretaire\SecretaireDashboardController;
 use App\Http\Controllers\SecretaireController;
 use GuzzleHttp\Client;
 use Illuminate\Support\Facades\Route;
@@ -110,14 +112,57 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/client/sub-account', [ClientController::class, 'storeSubAccount'])->name('client.subaccount.store');
     });
 
-    // Espaces dédiés au personnel intermédiaire
-    Route::middleware(['role:Comptable'])->group(function () {
-        Route::get('/comptable/dashboard', [ComptableController::class, 'index'])->name('comptable.dashboard');
+    // ==========================================
+// ESPACE DÉDIÉ COMPTABILITÉ (Scoped par Agence)
+// ==========================================
+Route::middleware(['auth', 'role:Comptable|Caissier', 'agency.scope'])
+    ->prefix('comptabilite')
+    ->name('comptabilite.')
+    ->group(function () {
+
+        Route::get('/dashboard', [ComptableDashboardController::class, 'index'])->name('dashboard');
+        // 1. Finance & Trésorerie
+        Route::get('/caisses', [ComptableDashboardController::class, 'caisses'])->name('caisses.index');
+        // Nouvelle route unique pour Dépôt & Retrait Express
+        Route::post('/transactions/express', [ComptableDashboardController::class, 'storeTransaction'])->name('transactions.store');
+        Route::get('/ecritures', [ComptableDashboardController::class, 'ecritures'])->name('ecritures.index');
+        Route::get('/coffre', [ComptableDashboardController::class, 'coffre'])->name('coffre.index');
+
+        // 2. Contrôle des Flux & Agence
+        Route::get('/flux', [ComptableDashboardController::class, 'flux'])->name('flux.index');
+        Route::get('/clients', [ComptableDashboardController::class, 'clients'])->name('clients.index');
+        Route::get('/boutique', [ComptableDashboardController::class, 'boutique'])->name('boutique.index');
+
+        // 3. Portefeuille Crédits & Rapports
+        Route::get('/echeanciers', [ComptableDashboardController::class, 'echeanciers'])->name('echeanciers.index');
+        Route::get('/rapports', [ComptableDashboardController::class, 'rapports'])->name('rapports.index');
+
     });
 
-    Route::middleware(['role:Secretaire'])->group(function () {
-        Route::get('/secretaire/dashboard', [SecretaireController::class, 'index'])->name('secretaire.dashboard');
+// ==========================================
+// ESPACE DÉDIÉ SECRÉTARIAT (Scoped par Agence)
+// ==========================================
+Route::middleware(['auth', 'role:Secretaire', 'agency.scope'])
+    ->prefix('secretaire')
+    ->name('secretaire.')
+    ->group(function () {
+
+        Route::get('/dashboard', [SecretaireDashboardController::class, 'index'])->name('dashboard');
+        Route::post('/clients/store', [SecretaireDashboardController::class, 'storeClient'])->name('clients.store');
+
     });
+
+    // // Espaces dédiés au personnel intermédiaire
+    // Route::middleware(['role:Comptable'])->group(function () {
+    //     Route::get('/comptable/dashboard', [ComptableController::class, 'index'])->name('comptable.dashboard');
+    //     // Flux et gestion des Structures / Agences
+    //         Route::get('/comptable/structures', [StructureController::class, 'index'])->name('structures.index');
+
+    // });
+
+    // Route::middleware(['role:Secretaire'])->group(function () {
+    //     Route::get('/secretaire/dashboard', [SecretaireController::class, 'index'])->name('secretaire.dashboard');
+    // });
 
     // =========================================================================
     // ESPACE ADMINISTRATION & DIRECTION (SuperAdmin, PDG, DG, DAF)
@@ -155,6 +200,10 @@ Route::middleware(['auth'])->group(function () {
             // Gestion des Secteurs & Zones de Collecte
             Route::post('/zones', [ZoneController::class, 'store'])->name('zones.store');
             Route::post('/zones/{id}/assign-agents', [ZoneController::class, 'assignAgents'])->name('zones.assign');
+            Route::get('/zones/{id}', [ZoneController::class, 'show'])->name('zones.show');
+            Route::put('/zones/{id}', [ZoneController::class, 'update'])->name('zones.update');
+            Route::delete('/zones/{id}', [ZoneController::class, 'destroy'])->name('zones.destroy');
+
 
             // Consultation et suivi des Clients
             Route::get('/clients', [SuperAdminController::class, 'clientsIndex'])->name('clients.index');

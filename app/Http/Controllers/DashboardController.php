@@ -22,7 +22,7 @@ class DashboardController extends Controller
 
         // Si c'est un comptable
         if ($user->hasRole('Comptable')) {
-            return redirect()->route('comptable.dashboard');
+            return redirect()->route('comptabilite.dashboard');
         }
 
         // Si c'est une secrétaire

@@ -202,24 +202,24 @@ class DatabaseSeeder extends Seeder
         // 7. CLIENTS TERRAIN (Connexion exclusivement par NUMÉRO DE TÉLÉPHONE)
         // =========================================================================
 
-        $client1 = User::create([
-            'name' => 'Mama Jeanne (Commerçante)',
-            'email' => null, // Optionnel ou vide pour un client
-            'phone' => '670112233', // Utilisé pour le login Client
-            'password' => Hash::make('password123'),
-            'structure_id' => $agenceAkwa->id,
-            'zone_id' => $zoneMarche->id,
-        ]);
-        $client1->assignRole('Client');
+        // $client1 = User::create([
+        //     'name' => 'Mama Jeanne (Commerçante)',
+        //     'email' => null, // Optionnel ou vide pour un client
+        //     'phone' => '670112233', // Utilisé pour le login Client
+        //     'password' => Hash::make('password123'),
+        //     'structure_id' => $agenceAkwa->id,
+        //     'zone_id' => $zoneMarche->id,
+        // ]);
+        // $client1->assignRole('Client');
 
-        $client2 = User::create([
-            'name' => 'Papa Thomas (Boutiquier)',
-            'email' => null,
-            'phone' => '690445566', // Utilisé pour le login Client
-            'password' => Hash::make('password123'),
-            'structure_id' => $agenceAkwa->id,
-            'zone_id' => $zoneMarche->id,
-        ]);
-        $client2->assignRole('Client');
+        // $client2 = User::create([
+        //     'name' => 'Papa Thomas (Boutiquier)',
+        //     'email' => null,
+        //     'phone' => '690445566', // Utilisé pour le login Client
+        //     'password' => Hash::make('password123'),
+        //     'structure_id' => $agenceAkwa->id,
+        //     'zone_id' => $zoneMarche->id,
+        // ]);
+        // $client2->assignRole('Client');
     }
 }
