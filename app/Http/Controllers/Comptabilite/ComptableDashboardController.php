@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\Comptabilite;
 
 use App\Http\Controllers\Controller;
-use App\Models\Structure;
 use App\Models\Account;
+use App\Models\Structure;
 use App\Models\User;
+use App\Models\Zone;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class ComptableDashboardController extends Controller
 {
@@ -81,119 +84,807 @@ class ComptableDashboardController extends Controller
     }
 
     /**
- * Traitement des Dépôts et Retraits Express au Guichet
- */
-public function storeTransaction(Request $request)
-{
-    $request->validate([
-        'user_id' => 'required|exists:users,id', // ID du Client sélectionné
-        'type'    => 'required|in:deposit,withdrawal',
-        'amount'  => 'required|numeric|min:100',
-    ]);
+     * Traitement des Dépôts et Retraits Express au Guichet
+     */
+    public function storeTransaction(Request $request)
+    {
+        $request->validate([
+            'user_id' => 'required|exists:users,id', // ID du Client sélectionné
+            'type'    => 'required|in:deposit,withdrawal',
+            'amount'  => 'required|numeric|min:100',
+        ]);
 
-    $comptable = Auth::user();
-    $typeLabel = $request->type === 'deposit' ? 'Dépôt' : 'Retrait';
+        $comptable = Auth::user();
+        $typeLabel = $request->type === 'deposit' ? 'Dépôt' : 'Retrait';
 
-    // 1. Récupérer le compte (Account) associé au client
-    $account = DB::table('accounts')->where('user_id', $request->user_id)->first();
+        // 1. Récupérer le compte (Account) associé au client
+        $account = DB::table('accounts')->where('user_id', $request->user_id)->first();
 
-    return $account;
+        // return $account;
 
-    // Sécurité au cas où le client n'a pas encore de compte créé dans la table `accounts`
-    if (!$account) {
-        return redirect()->back()->with('error', 'Erreur : Aucun compte bancaire/épargne associé à ce client.');
+        // Sécurité au cas où le client n'a pas encore de compte créé dans la table `accounts`
+        if (!$account) {
+            return redirect()->back()->with('error', 'Erreur : Aucun compte bancaire/épargne associé à ce client.');
+        }
+
+            // 2. Calcul des frais de retrait (500 XAF / tranche de 25 000 XAF)
+        $fees = 0;
+        if ($request->type === 'withdrawal') {
+            $tranches = ceil($request->amount / 25000);
+            $fees = $tranches * 500;
+        }
+
+        // 3. Exécution sécurisée en Transaction SQL
+        try {
+            DB::transaction(function () use ($request, $account, $comptable, $fees, $typeLabel) {
+
+                // Vérification stricte du solde pour un retrait (Montant + Frais)
+                if ($request->type === 'withdrawal') {
+                    $depots = DB::table('transactions')
+                        ->where('account_id', $account->id)
+                        ->where('type', 'deposit')
+                        ->sum('amount');
+
+                    $retraits = DB::table('transactions')
+                        ->where('account_id', $account->id)
+                        ->where('type', 'withdrawal')
+                        ->sum('amount');
+
+                    $soldeDispo = $depots - $retraits;
+                    $totalA_Debiter = $request->amount + $fees;
+
+                    if ($totalA_Debiter > $soldeDispo) {
+                        throw new \Exception('Solde insuffisant (' . number_format($soldeDispo, 0, ',', ' ') . ' XAF disponible, frais inclus).');
+                    }
+                }
+
+                $prefix = $request->type === 'deposit' ? 'DEP-' : 'RET-';
+
+                // Enregistrement de la transaction
+                DB::table('transactions')->insert([
+                    'account_id'   => $account->id,
+                    'performed_by' => $comptable->id,
+                    'type'         => $request->type,
+                    'amount'       => $request->amount,
+                    'fees'         => $fees,
+                    'reference'    => $prefix . strtoupper(uniqid()),
+                    'description'  => $typeLabel . ' Express au Guichet',
+                    'created_at'   => now(),
+                    'updated_at'   => now(),
+                ]);
+            });
+
+            return redirect()->back()->with('success', $typeLabel . ' de ' . number_format($request->amount, 0, ',', ' ') . ' XAF effectué avec succès !');
+
+        } catch (\Exception $e) {
+                return redirect()->back()->with('error', $e->getMessage());
+            }
     }
 
-    // 2. Si c'est un RETRAIT, vérification du solde sur la table `transactions` avec `account_id`
-    if ($request->type === 'withdrawal') {
-        $depots = DB::table('transactions')
-            ->where('account_id', $account->id)
-            ->where('type', 'deposit')
+
+    /**
+     * Suivi et Clôture des Caisses des Agents
+     */
+    public function caisses()
+    {
+        $comptable = Auth::user();
+        $agencyId = $comptable->structure_id;
+
+        // 1. Caisses des agents de l'agence avec calcul des soldes
+        $agentsCaisses = User::where('structure_id', $agencyId)
+            ->whereHas('roles', function($q) {
+                $q->whereIn('name', ['Collectrice', 'Commercial', 'Caissier']);
+            })
+            ->with(['roles', 'zone'])
+            ->get()
+            ->map(function ($agent) {
+                // Dépôts perçus par l'agent
+                $agent->total_encaisse = DB::table('transactions')
+                    ->where('performed_by', $agent->id)
+                    ->where('type', 'deposit')
+                    ->sum('amount');
+
+                // Retraits payés par l'agent
+                $agent->total_decaisse = DB::table('transactions')
+                    ->where('performed_by', $agent->id)
+                    ->where('type', 'withdrawal')
+                    ->sum('amount');
+
+                // Solde théorique que l'agent doit avoir physiquement en main
+                $agent->solde_theorique = $agent->total_encaisse - $agent->total_decaisse;
+
+                return $agent;
+            });
+
+        // 2. Calcul des totaux globaux pour les cartes de synthèse
+        $totalEspecesCollectees = $agentsCaisses->sum('total_encaisse');
+        $totalSoldeEnCirculation = $agentsCaisses->sum('solde_theorique');
+
+        return view('comptabilite.caisses.index', compact(
+            'agentsCaisses',
+            'totalEspecesCollectees',
+            'totalSoldeEnCirculation'
+        ));
+    }
+
+
+
+    /**
+     * Traitement de la validation du Versement / Déchargement d'un agent
+     */
+    public function validerArrete(Request $request)
+    {
+        $request->validate([
+            'agent_id'       => 'required|exists:users,id',
+            'amount_declare' => 'required|numeric|min:0',
+        ]);
+
+        $comptable = Auth::user();
+
+        // 1. Récupérer le compte (Account) associé à l'agent
+        $agentAccountId = DB::table('accounts')->where('user_id', $request->agent_id)->value('id');
+
+        // Sécurité au cas où l'agent n'a pas encore de compte dans la table `accounts`
+        if (!$agentAccountId) {
+            return redirect()->back()->with('error', 'Erreur : Aucun compte associé à cet agent sur le système.');
+        }
+
+        // 2. Calcul des encaissements et décaissements via transactions.account_id
+        $encaisse = DB::table('transactions')->where('account_id', $agentAccountId)->where('type', 'deposit')->sum('amount');
+        $decaisse = DB::table('transactions')->where('account_id', $agentAccountId)->where('type', 'withdrawal')->sum('amount');
+        $soldeTheorique = $encaisse - $decaisse;
+
+        $ecart = $request->amount_declare - $soldeTheorique;
+
+        // 3. Exécution sécurisée
+        try {
+            DB::transaction(function () use ($request, $comptable, $agentAccountId, $soldeTheorique, $ecart) {
+
+                // A. Enregistrement de la clôture dans cash_settlements
+                $arreteId = DB::table('cash_settlements')->insertGetId([
+                    'agent_id'        => $request->agent_id,
+                    'validated_by'    => $comptable->id,
+                    'expected_amount' => $soldeTheorique,
+                    'declared_amount' => $request->amount_declare,
+                    'gap_amount'      => $ecart,
+                    'status'          => $ecart == 0 ? 'conforme' : ($ecart < 0 ? 'manquant' : 'surplus'),
+                    'created_at'      => now(),
+                    'updated_at'      => now(),
+                ]);
+
+                // B. Transfert de déchargement lié au compte de l'agent (account_id non null)
+                DB::table('transactions')->insert([
+                    'account_id'   => $agentAccountId, // ID de la table `accounts` de l'agent
+                    'performed_by' => $comptable->id,
+                    'type'         => 'transfer',
+                    'amount'       => $request->amount_declare,
+                    'fees'         => 0,
+                    'reference'    => 'ARR-' . strtoupper(uniqid()),
+                    'description'  => 'Déchargement caisse Agent ID: ' . $request->agent_id . ' (Arrêté #' . $arreteId . ')',
+                    'created_at'   => now(),
+                    'updated_at'   => now(),
+                ]);
+            });
+
+            $msg = $ecart == 0
+                ? 'Caisse déchargée et conforme !'
+                : 'Arrêté enregistré avec un ' . ($ecart < 0 ? 'MANQUANT' : 'SURPLUS') . ' de ' . number_format(abs($ecart), 0, ',', ' ') . ' XAF.';
+
+            return redirect()->back()->with($ecart == 0 ? 'success' : 'warning', $msg);
+
+            } catch (\Exception $e) {
+                return redirect()->back()->with('error', 'Erreur lors du déchargement : ' . $e->getMessage());
+            }
+    }
+
+
+
+        /**
+     * Consultation du Grand Livre et Historique des Écritures
+     */
+    public function ecritures(Request $request)
+    {
+        $comptable = Auth::user();
+        $agency = Structure::findOrFail($comptable->structure_id);
+
+        // Filtres
+        $type = $request->get('type');
+        $startDate = $request->get('start_date', now()->startOfMonth()->toDateString());
+        $endDate = $request->get('end_date', now()->toDateString());
+        $search = $request->get('search');
+
+        // Requête sur les transactions
+        $query = DB::table('transactions')
+            ->leftJoin('accounts', 'transactions.account_id', '=', 'accounts.id')
+            ->leftJoin('users as client', 'accounts.user_id', '=', 'client.id')
+            ->leftJoin('users as agent', 'transactions.performed_by', '=', 'agent.id')
+            ->select(
+                'transactions.*',
+                'client.name as client_name',
+                'client.phone as client_phone',
+                'agent.name as agent_name'
+            )
+            ->whereDate('transactions.created_at', '>=', $startDate)
+            ->whereDate('transactions.created_at', '<=', $endDate);
+
+        // Application des filtres dynamique
+        if ($type) {
+            $query->where('transactions.type', $type);
+        }
+
+        if ($search) {
+            $query->where(function($q) use ($search) {
+                $q->where('transactions.reference', 'LIKE', "%{$search}%")
+                ->orWhere('transactions.description', 'LIKE', "%{$search}%")
+                ->orWhere('client.name', 'LIKE', "%{$search}%")
+                ->orWhere('agent.name', 'LIKE', "%{$search}%");
+            });
+        }
+
+        $transactions = $query->orderBy('transactions.created_at', 'desc')->paginate(20);
+
+        // Totaux sur la période filtrée
+        $totauxPériode = DB::table('transactions')
+            ->whereDate('created_at', '>=', $startDate)
+            ->whereDate('created_at', '<=', $endDate)
+            ->select(
+                DB::raw("COALESCE(SUM(CASE WHEN type = 'deposit' THEN amount ELSE 0 END), 0) as total_depots"),
+                DB::raw("COALESCE(SUM(CASE WHEN type = 'withdrawal' THEN amount ELSE 0 END), 0) as total_retraits"),
+                DB::raw("COALESCE(SUM(fees), 0) as total_frais")
+            )->first();
+
+        return view('comptabilite.ecritures.index', compact(
+            'transactions',
+            'totauxPériode',
+            'type',
+            'startDate',
+            'endDate',
+            'search'
+        ));
+    }
+
+    /**
+     * Passer une Écriture Comptable Manuelle / Ajustement
+     */
+    public function storeEcriture(Request $request)
+    {
+        $request->validate([
+            'user_id'     => 'required|exists:users,id',
+            'type'        => 'required|in:deposit,withdrawal,fee',
+            'amount'      => 'required|numeric|min:1',
+            'description' => 'required|string|max:255',
+        ]);
+
+        $comptable = Auth::user();
+        $account = DB::table('accounts')->where('user_id', $request->user_id)->first();
+
+        if (!$account) {
+            return redirect()->back()->with('error', 'Aucun compte associé à cet utilisateur.');
+        }
+
+        DB::table('transactions')->insert([
+            'account_id'   => $account->id,
+            'performed_by' => $comptable->id,
+            'type'         => $request->type,
+            'amount'       => $request->amount,
+            'fees'         => 0,
+            'reference'    => 'REG-' . strtoupper(uniqid()),
+            'description'  => '[Régularisation Comptable] ' . $request->description,
+            'created_at'   => now(),
+            'updated_at'   => now(),
+        ]);
+
+        return redirect()->back()->with('success', 'Écriture de régularisation enregistrée avec succès !');
+    }
+
+    /**
+     * Vue principale de la gestion du Coffre-Fort Agence
+     */
+    public function coffre()
+    {
+        $comptable = Auth::user();
+        $agencyId = $comptable->structure_id;
+
+        // 1. Calcul du solde actuel du coffre
+        // Entrées dans le coffre : Approvisionnements siège/banque + Arrêtés/Déchargements d'agents
+        $totalEntrees = DB::table('transactions')
+            ->whereNull('account_id') // Opérations internes agence
+            ->whereIn('type', ['vault_deposit', 'transfer'])
             ->sum('amount');
 
-        $retraits = DB::table('transactions')
-            ->where('account_id', $account->id)
-            ->where('type', 'withdrawal')
+        // Sorties du coffre : Dépôts en banque + Dotations de caisses aux agents
+        $totalSorties = DB::table('transactions')
+            ->whereNull('account_id')
+            ->whereIn('type', ['vault_withdrawal', 'agent_dotation'])
             ->sum('amount');
 
-        $soldeDispo = $depots - $retraits;
+        $soldeCoffre = $totalEntrees - $totalSorties;
 
-        if ($request->amount > $soldeDispo) {
-            return redirect()->back()->with('error', 'Retrait impossible : Solde insuffisant (' . number_format($soldeDispo, 0, ',', ' ') . ' XAF disponible).');
+        // 2. Historique des mouvements du coffre
+        $mouvementsCoffre = DB::table('transactions')
+            ->leftJoin('users as agent', 'transactions.performed_by', '=', 'agent.id')
+            ->select(
+                'transactions.*',
+                'agent.name as agent_name'
+            )
+            ->whereNull('transactions.account_id')
+            ->whereIn('transactions.type', ['vault_deposit', 'vault_withdrawal', 'agent_dotation', 'transfer'])
+            ->orderBy('transactions.created_at', 'desc')
+            ->paginate(15);
+
+        // 3. Liste des agents de l'agence pour la modal de dotation
+        $agentsAgence = User::where('structure_id', $agencyId)
+            ->whereHas('roles', function($q) {
+                $q->whereIn('name', ['Collectrice', 'Commercial', 'Caissier']);
+            })
+            ->select('id', 'name', 'phone')
+            ->get();
+
+        return view('comptabilite.coffre.index', compact(
+            'soldeCoffre',
+            'totalEntrees',
+            'totalSorties',
+            'mouvementsCoffre',
+            'agentsAgence'
+        ));
+    }
+
+    /**
+     * Traitement des mouvements physiques de fond du Coffre-Fort
+     */
+    public function storeMouvementCoffre(Request $request)
+    {
+        $request->validate([
+            'action_type' => 'required|in:vault_deposit,vault_withdrawal,agent_dotation',
+            'amount'      => 'required|numeric|min:1000',
+            'description' => 'required|string|max:255',
+            'target_agent_id' => 'required_if:action_type,agent_dotation|nullable|exists:users,id',
+        ]);
+
+        $comptable = Auth::user();
+
+        // Verification du solde en cas de sortie
+        if (in_array($request->action_type, ['vault_withdrawal', 'agent_dotation'])) {
+            $entrees = DB::table('transactions')->whereNull('account_id')->whereIn('type', ['vault_deposit', 'transfer'])->sum('amount');
+            $sorties = DB::table('transactions')->whereNull('account_id')->whereIn('type', ['vault_withdrawal', 'agent_dotation'])->sum('amount');
+            $soldeDisponible = $entrees - $sorties;
+
+            if ($request->amount > $soldeDisponible) {
+                return redirect()->back()->with('error', 'Opération impossible : Solde insuffisant dans le coffre-fort (' . number_format($soldeDisponible, 0, ',', ' ') . ' XAF dispo).');
+            }
+        }
+
+        $refPrefix = match($request->action_type) {
+            'vault_deposit'    => 'APP-',
+            'vault_withdrawal' => 'BNQ-',
+            'agent_dotation'   => 'DOT-',
+        };
+
+        DB::transaction(function () use ($request, $comptable, $refPrefix) {
+            // Libellé personnalisé
+            $desc = $request->description;
+            if ($request->action_type === 'agent_dotation') {
+                $targetAgent = User::find($request->target_agent_id);
+                $desc = '[Dotation Caisse Agent] Pour : ' . ($targetAgent->name ?? 'Agent') . ' - ' . $request->description;
+            }
+
+            DB::table('transactions')->insert([
+                'account_id'   => null, // Opération interne coffre
+                'performed_by' => $comptable->id,
+                'type'         => $request->action_type,
+                'amount'       => $request->amount,
+                'fees'         => 0,
+                'reference'    => $refPrefix . strtoupper(uniqid()),
+                'description'  => $desc,
+                'created_at'   => now(),
+                'updated_at'   => now(),
+            ]);
+        });
+
+        return redirect()->back()->with('success', 'Mouvement de coffre enregistré avec succès !');
+    }
+
+    /**
+     * Suivi consolidé des Flux Financiers par Agence et par Zone
+     */
+    public function flux(Request $request)
+    {
+        $comptable = Auth::user();
+        $agency = Structure::with('zones')->findOrFail($comptable->structure_id);
+
+        // Filtre de période (par défaut le mois en cours)
+        $startDate = $request->get('start_date', now()->startOfMonth()->toDateString());
+        $endDate = $request->get('end_date', now()->toDateString());
+
+        // 1. Synthèse par Zone de l'agence
+        $zonesStats = $agency->zones->map(function ($zone) use ($startDate, $endDate) {
+            // IDs des agents de cette zone
+            $agentIds = User::where('zone_id', $zone->id)->pluck('id');
+
+            // Dépôts collectés dans la zone
+            $depots = DB::table('transactions')
+                ->whereIn('performed_by', $agentIds)
+                ->where('type', 'deposit')
+                ->whereDate('created_at', '>=', $startDate)
+                ->whereDate('created_at', '<=', $endDate)
+                ->sum('amount');
+
+            // Retraits effectués dans la zone
+            $retraits = DB::table('transactions')
+                ->whereIn('performed_by', $agentIds)
+                ->where('type', 'withdrawal')
+                ->whereDate('created_at', '>=', $startDate)
+                ->whereDate('created_at', '<=', $endDate)
+                ->sum('amount');
+
+            // Nombre de collectes effectuées
+            $nbTransactions = DB::table('transactions')
+                ->whereIn('performed_by', $agentIds)
+                ->whereDate('created_at', '>=', $startDate)
+                ->whereDate('created_at', '<=', $endDate)
+                ->count();
+
+            $zone->total_depots = $depots;
+            $zone->total_retraits = $retraits;
+            $zone->flux_net = $depots - $retraits;
+            $zone->nb_transactions = $nbTransactions;
+            $zone->nb_agents = $agentIds->count();
+
+            return $zone;
+        });
+
+        // 2. Performance des agents par Zone (Top Collecteurs)
+        $topAgents = User::where('structure_id', $agency->id)
+            ->whereHas('roles', function($q) {
+                $q->whereIn('name', ['Collectrice', 'Commercial']);
+            })
+            ->with('zone')
+            ->get()
+            ->map(function($agent) use ($startDate, $endDate) {
+                $agent->total_collecte = DB::table('transactions')
+                    ->where('performed_by', $agent->id)
+                    ->where('type', 'deposit')
+                    ->whereDate('created_at', '>=', $startDate)
+                    ->whereDate('created_at', '<=', $endDate)
+                    ->sum('amount');
+                return $agent;
+            })
+            ->sortByDesc('total_collecte')
+            ->take(5);
+
+        // 3. Totaux globaux de l'agence sur la période
+        $totalAgenceDepots = $zonesStats->sum('total_depots');
+        $totalAgenceRetraits = $zonesStats->sum('total_retraits');
+        $totalAgenceNet = $totalAgenceDepots - $totalAgenceRetraits;
+
+        return view('comptabilite.flux.index', compact(
+            'agency',
+            'zonesStats',
+            'topAgents',
+            'totalAgenceDepots',
+            'totalAgenceRetraits',
+            'totalAgenceNet',
+            'startDate',
+            'endDate'
+        ));
+    }
+
+    /**
+     * Consultation et Gestion des Comptes Clients de l'Agence
+     */
+    public function clients(Request $request)
+    {
+        $comptable = Auth::user();
+        $agencyId = $comptable->structure_id;
+        $search = $request->get('search');
+        $accountType = $request->get('account_type');
+
+        // Récupération des zones pour le formulaire d'ajout
+        $zones = Zone::where('structure_id', $agencyId)->get();
+
+        // Requête principale sur les clients de l'agence
+        $query = User::where('structure_id', $agencyId)
+            ->whereHas('roles', function ($q) {
+                $q->where('name', 'Client');
+            })
+            ->with(['zone', 'accounts']);
+
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'LIKE', "%{$search}%")
+                  ->orWhere('phone', 'LIKE', "%{$search}%")
+                  ->orWhere('email', 'LIKE', "%{$search}%");
+            });
+        }
+
+        if ($accountType) {
+            $query->whereHas('accounts', function ($q) use ($accountType) {
+                $q->where('type', $accountType);
+            });
+        }
+
+        $clients = $query->orderBy('created_at', 'desc')->paginate(15);
+
+        // Types de Tontines disponibles
+        $tontineTypes = [
+            'simple'         => 'Tontine Simple',
+            'scolaire'       => 'Tontine Scolaire',
+            'investissement' => 'Tontine Investissement',
+            'fin_annee'      => 'Tontine Fin d\'Année',
+            'assurance'      => 'Tontine Assurance',
+            'islamique'      => 'Tontine Islamique',
+            'marchande'      => 'Tontine Marchande',
+            'electromenager' => 'Tontine Électroménager',
+        ];
+
+        // Stats Globales
+        $totalClientsActifs = User::where('structure_id', $agencyId)->where('status', 'active')->count();
+        $totalEpargneGlobal = DB::table('accounts')
+            ->join('users', 'accounts.user_id', '=', 'users.id')
+            ->where('users.structure_id', $agencyId)
+            ->sum('accounts.balance');
+
+        return view('comptabilite.clients.index', compact(
+            'clients',
+            'zones',
+            'tontineTypes',
+            'totalClientsActifs',
+            'totalEpargneGlobal',
+            'search',
+            'accountType'
+        ));
+    }
+
+    /**
+     * Enregistrement d'un Nouveau Client + Ses Tontines Initiales
+     */
+    public function storeClient(Request $request)
+    {
+        $request->validate([
+            'name'             => 'required|string|max:255',
+            'phone'            => 'required|string|unique:users,phone',
+            'email'            => 'nullable|email|unique:users,email',
+            'zone_id'          => 'required|exists:zones,id',
+            'tontines'         => 'required|array|min:1',
+            'tontines.*'       => 'required|in:simple,scolaire,investissement,fin_annee,assurance,islamique,marchande,electromenager',
+            'deposits'         => 'required|array',
+            'deposits.*'       => 'required|numeric|min:1000', // Minimum 1000 XAF obligatoire
+        ], [
+            'deposits.*.min'   => 'Le versement initial par tontine doit être d\'au moins 1 000 XAF pour activation.',
+            'tontines.required'=> 'Veuillez sélectionner au moins une tontine pour le client.',
+        ]);
+
+        $comptable = Auth::user();
+
+        DB::beginTransaction();
+        try {
+            // 1. Création de l'utilisateur Client
+            $client = User::create([
+                'name'         => $request->name,
+                'phone'        => $request->phone,
+                'email'        => $request->email,
+                'password'     => Hash::make($request->phone), // Mot de passe par défaut = téléphone
+                'structure_id' => $comptable->structure_id,
+                'zone_id'      => $request->zone_id,
+                'status'       => 'active',
+            ]);
+
+            // Assignation du rôle Client
+            if (method_exists($client, 'assignRole')) {
+                $client->assignRole('Client');
+            }
+
+            // 2. Création des Tontines (Accounts) et Versement Initial
+            foreach ($request->tontines as $index => $tontineType) {
+                $depositAmount = $request->deposits[$tontineType] ?? 1000;
+
+                $account = DB::table('accounts')->insertGetId([
+                    'user_id'        => $client->id,
+                    'account_number' => 'ACC-' . strtoupper(Str::random(3)) . '-' . rand(10000, 99999),
+                    'type'           => $tontineType,
+                    'balance'        => $depositAmount,
+                    'reserve_fund'   => 1000.00,
+                    'status'         => 'active',
+                    'created_at'     => now(),
+                    'updated_at'     => now(),
+                ]);
+
+                // Transaction Dépôt Initial
+                DB::table('transactions')->insert([
+                    'account_id'   => $account,
+                    'performed_by' => $comptable->id,
+                    'type'         => 'deposit',
+                    'amount'       => $depositAmount,
+                    'fees'         => 0.00,
+                    'reference'    => 'DEP-INIT-' . strtoupper(Str::random(8)),
+                    'description'  => 'Dépôt initial obligatoire à la création (Tontine ' . ucfirst($tontineType) . ')',
+                    'created_at'   => now(),
+                    'updated_at'   => now(),
+                ]);
+            }
+
+            DB::commit();
+            return redirect()->route('comptabilite.clients.show', $client->id)
+                ->with('success', 'Nouveau client et ses tontines créés avec succès !');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return redirect()->back()->with('error', 'Erreur lors de la création : ' . $e->getMessage())->withInput();
         }
     }
 
-    $prefix = $request->type === 'deposit' ? 'DEP-' : 'RET-';
+    /**
+     * Fiche Détaillée d'un Client
+     */
+    public function showClient(Request $request, $id)
+    {
+        $comptable = Auth::user();
 
-    // 3. Insertion avec le vrai `account_id` (ID de la table `accounts`)
-    DB::table('transactions')->insert([
-        'account_id'   => $account->id,       // <-- Utilisation de $account->id au lieu de $request->user_id
-        'performed_by' => $comptable->id,
-        'type'         => $request->type,
-        'amount'       => $request->amount,
-        'fees'         => 0,
-        'reference'    => $prefix . strtoupper(uniqid()),
-        'description'  => $typeLabel . ' Express au Guichet',
-        'created_at'   => now(),
-        'updated_at'   => now(),
-    ]);
+        // Récupération du client
+        $client = User::where('structure_id', $comptable->structure_id)
+            ->with(['zone', 'structure', 'accounts'])
+            ->findOrFail($id);
 
-    return redirect()->back()->with('success', $typeLabel . ' de ' . number_format($request->amount, 0, ',', ' ') . ' XAF effectué avec succès !');
-}
+        // Collectrices affectées à la zone du client
+        $collectrices = User::where('zone_id', $client->zone_id)
+            ->whereHas('roles', function ($q) {
+                $q->whereIn('name', ['Collectrice', 'Commercial']);
+            })->get();
+
+        // Agent créateur (déduit du premier dépôt de son premier compte)
+        $firstAccount = $client->accounts->first();
+        $creator = null;
+        if ($firstAccount) {
+            $firstTx = DB::table('transactions')
+                ->where('account_id', $firstAccount->id)
+                ->orderBy('created_at', 'asc')
+                ->first();
+            if ($firstTx) {
+                $creator = User::find($firstTx->performed_by);
+            }
+        }
+
+        // Filtres Transactions
+        $startDate = $request->get('start_date');
+        $endDate = $request->get('end_date');
+        $txType = $request->get('tx_type');
+
+        $accountIds = $client->accounts->pluck('id');
+
+        $txQuery = DB::table('transactions')
+            ->join('accounts', 'transactions.account_id', '=', 'accounts.id')
+            ->join('users as agents', 'transactions.performed_by', '=', 'agents.id')
+            ->select('transactions.*', 'accounts.account_number', 'accounts.type as account_type', 'agents.name as agent_name')
+            ->whereIn('transactions.account_id', $accountIds);
+
+        if ($startDate) {
+            $txQuery->whereDate('transactions.created_at', '>=', $startDate);
+        }
+        if ($endDate) {
+            $txQuery->whereDate('transactions.created_at', '<=', $endDate);
+        }
+        if ($txType) {
+            $txQuery->where('transactions.type', $txType);
+        }
+
+        $transactions = $txQuery->orderBy('transactions.created_at', 'desc')->paginate(10);
+
+        // Achats Électroménager / Panier Boutique
+        $boutiqueTransactions = DB::table('transactions')
+            ->whereIn('account_id', $accountIds)
+            ->where('type', 'product_payment')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // Types de Tontines
+        $tontineTypes = [
+            'simple'         => 'Tontine Simple',
+            'scolaire'       => 'Tontine Scolaire',
+            'investissement' => 'Tontine Investissement',
+            'fin_annee'      => 'Tontine Fin d\'Année',
+            'assurance'      => 'Tontine Assurance',
+            'islamique'      => 'Tontine Islamique',
+            'marchande'      => 'Tontine Marchande',
+            'electromenager' => 'Tontine Électroménager',
+        ];
+
+        return view('comptabilite.clients.show', compact(
+            'client',
+            'collectrices',
+            'creator',
+            'transactions',
+            'boutiqueTransactions',
+            'tontineTypes',
+            'startDate',
+            'endDate',
+            'txType'
+        ));
+    }
 
     /**
-     * Traitement de la transaction de Retrait Express au Guichet
+     * Ajouter une nouvelle Tontine à un Client Existant
      */
-    // public function storeRetrait(Request $request)
-    // {
-    //     $request->validate([
-    //         'user_id' => 'required|exists:users,id',
-    //         'amount'  => 'required|numeric|min:100',
-    //     ]);
-
-    //     $comptable = Auth::user();
-
-    //     // Calcul du solde actuel du client
-    //     $depots = DB::table('transactions')->where('user_id', $request->user_id)->where('type', 'deposit')->sum('amount');
-    //     $retraits = DB::table('transactions')->where('user_id', $request->user_id)->where('type', 'withdrawal')->sum('amount');
-    //     $soldeDispo = $depots - $retraits;
-
-    //     // Vérification de sécurité du solde
-    //     if ($request->amount > $soldeDispo) {
-    //         return redirect()->back()->with('error', 'Retrait impossible : Le solde du client est insuffisant (' . number_format($soldeDispo, 0, ',', ' ') . ' XAF disponible).');
-    //     }
-
-    //     // Enregistrement du retrait en BDD
-    //     DB::table('transactions')->insert([
-    //         'user_id'      => $request->user_id,
-    //         'performed_by' => $comptable->id,
-    //         'type'         => 'withdrawal',
-    //         'amount'       => $request->amount,
-    //         'created_at'   => now(),
-    //         'updated_at'   => now(),
-    //     ]);
-
-    //     return redirect()->back()->with('success', 'Retrait de ' . number_format($request->amount, 0, ',', ' ') . ' XAF effectué avec succès !');
-    // }
-
-    public function ecritures()
+    public function addTontine(Request $request, $clientId)
     {
-        return view('comptabilite.ecritures.index');
+        $request->validate([
+            'type'            => 'required|in:simple,scolaire,investissement,fin_annee,assurance,islamique,marchande,electromenager',
+            'initial_deposit' => 'required|numeric|min:1000',
+        ], [
+            'initial_deposit.min' => 'Le versement initial doit être d\'au moins 1 000 XAF.',
+        ]);
+
+        $client = User::findOrFail($clientId);
+        $comptable = Auth::user();
+
+        // Vérifier si le client possède déjà ce type de tontine
+        $exists = DB::table('accounts')->where('user_id', $client->id)->where('type', $request->type)->exists();
+        if ($exists) {
+            return redirect()->back()->with('error', 'Le client possède déjà une tontine de type ' . ucfirst($request->type));
+        }
+
+        DB::beginTransaction();
+        try {
+            $accountId = DB::table('accounts')->insertGetId([
+                'user_id'        => $client->id,
+                'account_number' => 'ACC-' . strtoupper(Str::random(3)) . '-' . rand(10000, 99999),
+                'type'           => $request->type,
+                'balance'        => $request->initial_deposit,
+                'reserve_fund'   => 1000.00,
+                'status'         => 'active',
+                'created_at'     => now(),
+                'updated_at'     => now(),
+            ]);
+
+            DB::table('transactions')->insert([
+                'account_id'   => $accountId,
+                'performed_by' => $comptable->id,
+                'type'         => 'deposit',
+                'amount'       => $request->initial_deposit,
+                'fees'         => 0.00,
+                'reference'    => 'DEP-NEW-' . strtoupper(Str::random(8)),
+                'description'  => 'Ouverture nouvelle tontine : ' . ucfirst($request->type),
+                'created_at'   => now(),
+                'updated_at'   => now(),
+            ]);
+
+            DB::commit();
+            return redirect()->back()->with('success', 'Nouvelle tontine ajoutée avec succès !');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return redirect()->back()->with('error', 'Erreur : ' . $e->getMessage());
+        }
     }
 
-    public function coffre()
+    /**
+     * Changer l'état global du compte Client (Activer, Bloquer, Suspendre, Geler, Clôturer)
+     */
+    public function updateClientStatus(Request $request, $clientId)
     {
-        return view('comptabilite.coffre.index');
-    }
+        $request->validate([
+            'status' => 'required|in:active,suspended,blocked,frozen,closed',
+        ]);
 
-    public function flux()
-    {
-        return view('comptabilite.flux.index');
-    }
+        $client = User::findOrFail($clientId);
 
-    public function clients()
-    {
-        return view('comptabilite.clients.index');
+        if ($request->status === 'closed') {
+            // Clôture : Suspend le client et ferme toutes ses tontines
+            $client->update(['status' => 'suspended']);
+            DB::table('accounts')->where('user_id', $client->id)->update(['status' => 'closed', 'updated_at' => now()]);
+            $msg = "Compte client et tontines associées clôturés avec succès.";
+        } elseif ($request->status === 'frozen') {
+            // Gelé : Tontines gelées
+            DB::table('accounts')->where('user_id', $client->id)->update(['status' => 'frozen', 'updated_at' => now()]);
+            $msg = "Tontines du client gelées avec succès.";
+        } else {
+            // Actif / Suspendu / Bloqué
+            $client->update(['status' => $request->status === 'active' ? 'active' : 'suspended']);
+            $accountStatus = $request->status === 'active' ? 'active' : ($request->status === 'blocked' ? 'suspended' : 'suspended');
+            DB::table('accounts')->where('user_id', $client->id)->update(['status' => $accountStatus, 'updated_at' => now()]);
+            $msg = "Statut du client mis à jour vers : " . ucfirst($request->status);
+        }
+
+        return redirect()->back()->with('success', $msg);
     }
 
     public function boutique()
