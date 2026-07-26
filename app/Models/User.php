@@ -5,14 +5,22 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Models\Account;
 use App\Models\Agency;
+use App\Models\Objective;
+use App\Models\Product;
+use App\Models\Sanction;
+use App\Models\Structure;
+use App\Models\Transaction;
+use App\Models\User;
 use App\Models\Zone;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use SebastianBergmann\CodeCoverage\Report\Xml\Report;
 use Spatie\Permission\Traits\HasRoles;
 
 #[Fillable(['name', 'email', 'password'])]
@@ -20,20 +28,20 @@ use Spatie\Permission\Traits\HasRoles;
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable, HasRoles;
+    use HasFactory, Notifiable, HasRoles, SoftDeletes;
 
-    protected $fillable = [
-    'name',
-    'email',
-    'phone',
-    'password',
-    'agency_id',
-    'zone_id',
-    'structure_id',
-    'mfa_enabled',
-    'status',
-    'profile_photo'
-];
+        protected $fillable = [
+            'name',
+            'email',
+            'phone',
+            'password',
+            'agency_id',
+            'zone_id',
+            'structure_id',
+            'mfa_enabled',
+            'status',
+            'profile_photo'
+        ];
 
     /**
      * Get the attributes that should be cast.

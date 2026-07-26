@@ -8,6 +8,7 @@ use App\Http\Controllers\Admin\ZoneController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\Comptabilite\ComptableDashboardController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\Directeur\AgencyDirectorDashboardController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Secretaire\SecretaireDashboardController;
 use GuzzleHttp\Client;
@@ -166,17 +167,34 @@ Route::middleware(['auth'])->group(function () {
 
         });
 
-        // // Espaces dédiés au personnel intermédiaire
-        // Route::middleware(['role:Comptable'])->group(function () {
-        //     Route::get('/comptable/dashboard', [ComptableController::class, 'index'])->name('comptable.dashboard');
-        //     // Flux et gestion des Structures / Agences
-        //         Route::get('/comptable/structures', [StructureController::class, 'index'])->name('structures.index');
+        Route::middleware(['auth', 'role:Directeur Agence', 'agency.scope'])
+            ->prefix('directeur')
+            ->name('directeur.')
+            ->group(function () {
 
-        // });
+                // Dashboard Directeur d'Agence
+                Route::get('/dashboard', [AgencyDirectorDashboardController::class, 'index'])->name('dashboard');
+                Route::get('/validations', [AgencyDirectorDashboardController::class, 'validationsIndex'])->name('validations.index');
 
-        // Route::middleware(['role:Secretaire'])->group(function () {
-        //     Route::get('/secretaire/dashboard', [SecretaireController::class, 'index'])->name('secretaire.dashboard');
-        // });
+                // Portefeuille Clients
+                Route::get('/clients', [AgencyDirectorDashboardController::class, 'clientsIndex'])->name('clients.index');
+
+                // Module Boutique Agence
+                Route::prefix('shop')->name('shop.')->group(function () {
+                    Route::get('/articles', [AgencyDirectorDashboardController::class, 'shopArticles'])->name('articles');
+                    Route::get('/commandes', [AgencyDirectorDashboardController::class, 'shopOrders'])->name('orders');
+                });
+
+                // Finances, Personnel & Zones
+                Route::get('/caisses', [AgencyDirectorDashboardController::class, 'caissesIndex'])->name('caisses.index');
+                Route::post('/caisses/store', [AgencyDirectorDashboardController::class, 'caissesStore'])->name('caisses.store');
+                Route::post('/caisses/{id}/assign', [AgencyDirectorDashboardController::class, 'caissesAssign'])->name('caisses.assign');
+                Route::post('/caisses/transfer', [AgencyDirectorDashboardController::class, 'caissesTransfer'])->name('caisses.transfer');
+
+                Route::get('/personnel', [AgencyDirectorDashboardController::class, 'personnelIndex'])->name('personnel.index');
+                Route::get('/zones', [AgencyDirectorDashboardController::class, 'zonesIndex'])->name('zones.index');
+
+            });
 
         // =========================================================================
         // ESPACE ADMINISTRATION & DIRECTION (SuperAdmin, PDG, DG, DAF)

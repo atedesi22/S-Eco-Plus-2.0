@@ -44,6 +44,8 @@ class RoleAndPermissionSeeder extends Seeder
         $dirRole        = Role::create(['name' => 'Directeur Regional']);
         $daRole         = Role::create(['name' => 'Directeur Agence']);
         $comptableRole  = Role::create(['name' => 'Comptable']);
+        $caissierRole    = Role::firstOrCreate(['name' => 'Caissier']);   // Add Caissier
+        $caissiereRole   = Role::firstOrCreate(['name' => 'Caissière']);  // Add Caissière par précaution
         $secretaireRole = Role::create(['name' => 'Secretaire']);
         $chefComRole    = Role::create(['name' => 'Chef Commercial']);
         $collectriceRole= Role::create(['name' => 'Collectrice']);
@@ -59,6 +61,7 @@ class RoleAndPermissionSeeder extends Seeder
 
         $daRole->givePermissionTo(['view agency balances', 'validate operations']);
         $comptableRole->givePermissionTo(['view agency balances']);
+        $caissierRole->givePermissionTo(['collect money', 'view agency balances']);
         $secretaireRole->givePermissionTo(['manage inventory']);
 
         $collectriceRole->givePermissionTo(['collect money']);

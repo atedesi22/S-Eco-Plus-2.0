@@ -258,7 +258,7 @@ class SuperAdminController extends Controller
     // 8. TOUTES LES TRANSACTIONS & ETAT FINANCIER GLOBAL
     public function financesIndex()
     {
-        $transactions = Transaction::with(['performedBy', 'account.user'])->latest()->paginate(20);
+        $transactions = Transaction::with(['operator', 'account.user'])->latest()->paginate(20);
 
         // Calculs globaux analytiques
         $totalDeposits = Transaction::where('type', 'deposit')->sum('amount');
