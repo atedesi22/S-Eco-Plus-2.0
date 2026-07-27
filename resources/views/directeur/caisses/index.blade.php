@@ -31,6 +31,14 @@
         </div>
     @endif
 
+    @if($errors->any())
+        <div class="p-4 space-y-1 text-xs font-bold border bg-rose-500/10 border-rose-500/20 rounded-xl text-rose-400">
+            @foreach ($errors->all() as $error)
+                <p>• {{ $error }}</p>
+            @endforeach
+        </div>
+    @endif
+
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <div class="p-5 border bg-slate-900 border-slate-800 rounded-2xl">
             <span class="text-xs font-medium text-slate-400">Trésorerie Coffre-Fort</span>
@@ -69,9 +77,12 @@
                 </div>
 
                 <div class="space-y-1">
-                    <p class="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Solde disponible</p>
-                    <p class="text-xl font-bold text-emerald-400">{{ number_format($caisse->current_balance, 0, ',', ' ') }} XAF</p>
-                    <p class="text-[10px] text-slate-500">Plafond : {{ number_format($caisse->max_limit, 0, ',', ' ') }} XAF</p>
+                    <p class="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Solde actuel / Ouverture</p>
+                    <p class="text-xl font-bold text-emerald-400">{{ number_format($caisse->current_balance, 0, ',', ' ') }} <span class="text-xs font-normal text-slate-400">XAF</span></p>
+                    <div class="flex justify-between text-[10px] text-slate-500 pt-1">
+                        <span>Solde initial : {{ number_format($caisse->opening_balance, 0, ',', ' ') }} XAF</span>
+                        <span>Plafond : {{ number_format($caisse->max_limit, 0, ',', ' ') }} XAF</span>
+                    </div>
                 </div>
 
                 <form action="{{ route('directeur.caisses.assign', $caisse->id) }}" method="POST" class="pt-3 space-y-2 border-t border-slate-800">
@@ -86,7 +97,7 @@
                                 </option>
                             @endforeach
                         </select>
-                        <button type="submit" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-bold text-white rounded-xl border border-slate-700">
+                        <button type="submit" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-bold text-white rounded-xl border border-slate-700 transition">
                             OK
                         </button>
                     </div>
@@ -108,6 +119,7 @@
 
             <form action="{{ route('directeur.caisses.store') }}" method="POST" class="space-y-4">
                 @csrf
+
                 <div>
                     <label class="block mb-1 text-xs text-slate-400">Nom du Guichet / Coffre</label>
                     <input type="text" name="name" required placeholder="Ex: Guichet 03 / Coffre Principal" class="w-full px-3 py-2 text-xs text-white border bg-slate-950 border-slate-800 rounded-xl focus:outline-none focus:border-emerald-500">
@@ -123,13 +135,38 @@
                 </div>
 
                 <div>
-                    <label class="block mb-1 text-xs text-slate-400">Plafond d'encaisse (XAF)</label>
-                    <input type="number" name="max_limit" value="5000000" class="w-full px-3 py-2 text-xs text-white border bg-slate-950 border-slate-800 rounded-xl focus:outline-none focus:border-emerald-500">
+                    <label class="block mb-1 text-xs text-slate-400">Assigner à un caissier (Optionnel)</label>
+                    <select name="assigned_to" class="w-full px-3 py-2 text-xs text-white border bg-slate-950 border-slate-800 rounded-xl focus:outline-none focus:border-emerald-500">
+                        <option value="">-- Aucun --</option>
+                        @foreach($caissiers as $agent)
+                            <option value="{{ $agent->id }}">{{ $agent->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block mb-1 text-xs text-slate-400">Solde Initial (XAF)</label>
+                        <input type="number" name="opening_balance" value="0" min="0" required class="w-full px-3 py-2 text-xs text-white border bg-slate-950 border-slate-800 rounded-xl focus:outline-none focus:border-emerald-500">
+                    </div>
+
+                    <div>
+                        <label class="block mb-1 text-xs text-slate-400">Plafond Max (XAF)</label>
+                        <input type="number" name="max_limit" value="5000000" min="0" required class="w-full px-3 py-2 text-xs text-white border bg-slate-950 border-slate-800 rounded-xl focus:outline-none focus:border-emerald-500">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block mb-1 text-xs text-slate-400">État de la Caisse</label>
+                    <select name="status" class="w-full px-3 py-2 text-xs text-white border bg-slate-950 border-slate-800 rounded-xl focus:outline-none focus:border-emerald-500">
+                        <option value="open">Ouverte</option>
+                        <option value="closed" selected>Fermée</option>
+                    </select>
                 </div>
 
                 <div class="flex justify-end gap-2 pt-2">
                     <button type="button" @click="modalOpen = false" class="px-4 py-2 text-xs font-bold text-slate-400 hover:text-white">Annuler</button>
-                    <button type="submit" class="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl">Enregistrer</button>
+                    <button type="submit" class="px-4 py-2 text-xs font-bold text-white transition bg-emerald-600 hover:bg-emerald-500 rounded-xl">Enregistrer</button>
                 </div>
             </form>
         </div>
@@ -148,7 +185,7 @@
                     <label class="block mb-1 text-xs text-slate-400">Caisse Source (Débit)</label>
                     <select name="from_caisse_id" class="w-full px-3 py-2 text-xs text-white border bg-slate-950 border-slate-800 rounded-xl focus:outline-none focus:border-emerald-500">
                         @foreach($caisses as $c)
-                            <option value="{{ $c->id }}">{{ $c->name }} (Solde: {{ number_format($c->current_balance) }} XAF)</option>
+                            <option value="{{ $c->id }}">{{ $c->name }} (Solde: {{ number_format($c->current_balance, 0, ',', ' ') }} XAF)</option>
                         @endforeach
                     </select>
                 </div>
@@ -169,7 +206,7 @@
 
                 <div class="flex justify-end gap-2 pt-2">
                     <button type="button" @click="transferModal = false" class="px-4 py-2 text-xs font-bold text-slate-400 hover:text-white">Annuler</button>
-                    <button type="submit" class="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl">Exécuter le Virement</button>
+                    <button type="submit" class="px-4 py-2 text-xs font-bold text-white transition bg-indigo-600 hover:bg-indigo-500 rounded-xl">Exécuter le Virement</button>
                 </div>
             </form>
         </div>

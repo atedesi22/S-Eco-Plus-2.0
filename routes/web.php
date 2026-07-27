@@ -142,9 +142,9 @@ Route::middleware(['auth'])->group(function () {
             // Comptes Clients Agence
             Route::get('/clients', [ComptableDashboardController::class, 'clients'])->name('clients.index');
             Route::post('/clients', [ComptableDashboardController::class, 'storeClient'])->name('clients.store');
-        Route::get('/clients/{id}', [ComptableDashboardController::class, 'showClient'])->name('clients.show');
-        Route::post('/clients/{id}/add-tontine', [ComptableDashboardController::class, 'addTontine'])->name('clients.add-tontine');
-        Route::post('/clients/{id}/update-status', [ComptableDashboardController::class, 'updateClientStatus'])->name('clients.update-status');
+            Route::get('/clients/{id}', [ComptableDashboardController::class, 'showClient'])->name('clients.show');
+            Route::post('/clients/{id}/add-tontine', [ComptableDashboardController::class, 'addTontine'])->name('clients.add-tontine');
+            Route::post('/clients/{id}/update-status', [ComptableDashboardController::class, 'updateClientStatus'])->name('clients.update-status');
 
             Route::get('/boutique', [ComptableDashboardController::class, 'boutique'])->name('boutique.index');
 
@@ -165,36 +165,40 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/dashboard', [SecretaireDashboardController::class, 'index'])->name('dashboard');
             Route::post('/clients/store', [SecretaireDashboardController::class, 'storeClient'])->name('clients.store');
 
-        });
+    });
 
-        Route::middleware(['auth', 'role:Directeur Agence', 'agency.scope'])
-            ->prefix('directeur')
-            ->name('directeur.')
-            ->group(function () {
+    Route::middleware(['auth', 'role:Directeur Agence', 'agency.scope'])
+        ->prefix('directeur')
+        ->name('directeur.')
+        ->group(function () {
 
-                // Dashboard Directeur d'Agence
-                Route::get('/dashboard', [AgencyDirectorDashboardController::class, 'index'])->name('dashboard');
-                Route::get('/validations', [AgencyDirectorDashboardController::class, 'validationsIndex'])->name('validations.index');
+            // Dashboard Directeur d'Agence
+            Route::get('/dashboard', [AgencyDirectorDashboardController::class, 'index'])->name('dashboard');
+            Route::get('/validations', [AgencyDirectorDashboardController::class, 'validationsIndex'])->name('validations.index');
 
-                // Portefeuille Clients
-                Route::get('/clients', [AgencyDirectorDashboardController::class, 'clientsIndex'])->name('clients.index');
+            // Portefeuille Clients
+            Route::get('/clients', [AgencyDirectorDashboardController::class, 'clientsIndex'])->name('clients.index');
 
-                // Module Boutique Agence
-                Route::prefix('shop')->name('shop.')->group(function () {
-                    Route::get('/articles', [AgencyDirectorDashboardController::class, 'shopArticles'])->name('articles');
-                    Route::get('/commandes', [AgencyDirectorDashboardController::class, 'shopOrders'])->name('orders');
-                });
-
-                // Finances, Personnel & Zones
-                Route::get('/caisses', [AgencyDirectorDashboardController::class, 'caissesIndex'])->name('caisses.index');
-                Route::post('/caisses/store', [AgencyDirectorDashboardController::class, 'caissesStore'])->name('caisses.store');
-                Route::post('/caisses/{id}/assign', [AgencyDirectorDashboardController::class, 'caissesAssign'])->name('caisses.assign');
-                Route::post('/caisses/transfer', [AgencyDirectorDashboardController::class, 'caissesTransfer'])->name('caisses.transfer');
-
-                Route::get('/personnel', [AgencyDirectorDashboardController::class, 'personnelIndex'])->name('personnel.index');
-                Route::get('/zones', [AgencyDirectorDashboardController::class, 'zonesIndex'])->name('zones.index');
-
+            // Module Boutique Agence
+            Route::prefix('shop')->name('shop.')->group(function () {
+                Route::get('/articles', [AgencyDirectorDashboardController::class, 'shopArticles'])->name('articles');
+                Route::get('/commandes', [AgencyDirectorDashboardController::class, 'shopOrders'])->name('orders');
             });
+
+            // Finances, Personnel & Zones
+            Route::get('/caisses', [AgencyDirectorDashboardController::class, 'caissesIndex'])->name('caisses.index');
+            Route::post('/caisses/store', [AgencyDirectorDashboardController::class, 'caissesStore'])->name('caisses.store');
+            Route::post('/caisses/{id}/assign', [AgencyDirectorDashboardController::class, 'caissesAssign'])->name('caisses.assign');
+            Route::post('/caisses/transfer', [AgencyDirectorDashboardController::class, 'caissesTransfer'])->name('caisses.transfer');
+
+            Route::get('/personnel', [AgencyDirectorDashboardController::class, 'personnelIndex'])->name('personnel.index');
+            // Module Zones de Collecte
+            Route::get('/zones', [AgencyDirectorDashboardController::class, 'zonesIndex'])->name('zones.index');
+            Route::post('/zones', [AgencyDirectorDashboardController::class, 'zonesStore'])->name('zones.store');
+            Route::post('/zones/assign', [AgencyDirectorDashboardController::class, 'zonesAssign'])->name('zones.assign');
+
+    });
+
 
         // =========================================================================
         // ESPACE ADMINISTRATION & DIRECTION (SuperAdmin, PDG, DG, DAF)

@@ -43,8 +43,8 @@
                 <span>Caisses & Coffres</span>
             </a>
 
-            <a href="#"
-               class="flex items-center px-4 py-2 space-x-3 text-sm transition rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white">
+            <a href="{{ route('directeur.zones.index', ['agencyId' => Auth::user()->agency_id]) }}"
+                class="flex items-center px-4 py-2 space-x-3 text-sm transition rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white">
                 <i class="bi bi-geo-alt-fill text-slate-500"></i>
                 <span>Zones de Collecte</span>
             </a>

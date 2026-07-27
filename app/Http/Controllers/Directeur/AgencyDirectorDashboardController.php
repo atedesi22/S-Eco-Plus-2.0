@@ -12,6 +12,7 @@ use GuzzleHttp\Client;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class AgencyDirectorDashboardController extends Controller
 {
@@ -164,23 +165,16 @@ class AgencyDirectorDashboardController extends Controller
         $director = Auth::user();
         $agencyId = $director->structure_id;
 
-        // Liste des caisses et coffres de l'agence
-        $caisses = DB::table('caisses')
-            ->leftJoin('users', 'caisses.assigned_to', '=', 'users.id')
-            ->where('caisses.structure_id', $agencyId)
-            ->select('caisses.*', 'users.name as agent_name')
-            ->orderByRaw("FIELD(type, 'coffre_fort', 'guichet', 'virtuelle')")
-            ->get();
+        $caisses = Caisse::select('caisses.*', 'users.name as agent_name')
+        ->leftJoin('users', 'caisses.assigned_to', '=', 'users.id')
+        ->where('caisses.structure_id', $agencyId) // 🟢 Précisé avec caisses.
+        ->orderByRaw("FIELD(caisses.type, 'coffre_fort', 'guichet', 'virtuelle')")
+        ->get();
 
-        // Liste des caissiers disponibles de l'agence pour l'attribution
-        // Si tu utilises spatie/laravel-permission :
+        // Caissiers disponibles
         $caissiers = User::where('structure_id', $agencyId)
-            ->role(['Caissier', 'Comptable']) // Méthode directe du package Spatie
+            ->role(['Caissier', 'Comptable'])
             ->get();
-        // $caissiers = User::where('structure_id', $agencyId)
-        //     ->whereHas('roles', function ($q) {
-        //         $q->whereIn('name', ['Caissier', 'Comptable']);
-        //     })->get();
 
         $soldeTotalCoffres = $caisses->where('type', 'coffre_fort')->sum('current_balance');
         $soldeTotalGuichets = $caisses->where('type', 'guichet')->sum('current_balance');
@@ -198,27 +192,26 @@ class AgencyDirectorDashboardController extends Controller
      */
     public function caissesStore(Request $request)
     {
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'type' => 'required|in:guichet,coffre_fort,virtuelle',
-            'max_limit' => 'required|numeric|min:0',
-        ]);
-
         $director = Auth::user();
 
-        DB::table('caisses')->insert([
-            'structure_id' => $director->structure_id,
-            'name' => $request->name,
-            'type' => $request->type,
-            'max_limit' => $request->max_limit,
-            'current_balance' => 0.00,
-            'opening_balance' => 0.00,
-            'status' => 'closed',
-            'created_at' => now(),
-            'updated_at' => now(),
+        // 1. Validation conforme au modèle
+        $validated = $request->validate([
+            'name'            => 'required|string|max:255',
+            'type'            => 'required|in:guichet,coffre_fort,virtuelle',
+            'assigned_to'     => 'nullable|exists:users,id',
+            'opening_balance' => 'required|numeric|min:0',
+            'max_limit'       => 'required|numeric|min:0',
+            'status'          => 'required|in:open,closed',
         ]);
 
-        return back()->with('success', 'Nouvelle caisse / coffre configuré avec succès.');
+        // 2. Uniformisation des données
+        $validated['structure_id'] = $director->structure_id;
+        $validated['current_balance'] = $validated['opening_balance']; // Le solde initial devient le solde courant à la création
+
+        // 3. Création uniforme
+        Caisse::create($validated);
+
+        return back()->with('success', 'Nouvelle caisse / coffre créé avec succès.');
     }
 
     /**
@@ -230,12 +223,12 @@ class AgencyDirectorDashboardController extends Controller
             'assigned_to' => 'nullable|exists:users,id',
         ]);
 
-        DB::table('caisses')->where('id', $id)->update([
-            'assigned_to' => $request->assigned_to,
-            'updated_at' => now(),
+        $caisse = Caisse::findOrFail($id);
+        $caisse->update([
+            'assigned_to' => $request->assigned_to
         ]);
 
-        return back()->with('success', 'Affectation mise à jour avec succès.');
+        return back()->with('success', 'Affectation du caissier mise à jour.');
     }
 
     /**
@@ -245,35 +238,36 @@ class AgencyDirectorDashboardController extends Controller
     {
         $request->validate([
             'from_caisse_id' => 'required|exists:caisses,id',
-            'to_caisse_id' => 'required|exists:caisses,id|different:from_caisse_id',
-            'amount' => 'required|numeric|min:1000',
+            'to_caisse_id'   => 'required|exists:caisses,id|different:from_caisse_id',
+            'amount'         => 'required|numeric|min:1000',
         ]);
 
-        $from = DB::table('caisses')->where('id', $request->from_caisse_id)->first();
+        $from = Caisse::findOrFail($request->from_caisse_id);
 
         if ($from->current_balance < $request->amount) {
             return back()->with('error', 'Solde insuffisant dans la caisse source.');
         }
 
-        DB::transaction(function () use ($request) {
-            // Retrait Caisse Source
-            DB::table('caisses')->where('id', $request->from_caisse_id)->decrement('current_balance', $request->amount);
+        DB::transaction(function () use ($request, $from) {
+            // Débit
+            $from->decrement('current_balance', $request->amount);
 
-            // Dépôt Caisse Destination
-            DB::table('caisses')->where('id', $request->to_caisse_id)->increment('current_balance', $request->amount);
+            // Crédit
+            Caisse::where('id', $request->to_caisse_id)
+                ->increment('current_balance', $request->amount);
 
-            // Log de validation
+            // Traçabilité / Validation
             DB::table('pending_validations')->insert([
                 'structure_id' => Auth::user()->structure_id,
                 'requested_by' => Auth::id(),
-                'type' => 'cash_transfer',
-                'description' => "Transfert interne de " . number_format($request->amount) . " XAF",
-                'amount' => $request->amount,
-                'status' => 'approved',
+                'type'         => 'cash_transfer',
+                'description'  => "Transfert interne de " . number_format($request->amount, 0, ',', ' ') . " XAF",
+                'amount'       => $request->amount,
+                'status'       => 'approved',
                 'validated_by' => Auth::id(),
                 'validated_at' => now(),
-                'created_at' => now(),
-                'updated_at' => now(),
+                'created_at'   => now(),
+                'updated_at'   => now(),
             ]);
         });
 
@@ -284,42 +278,114 @@ class AgencyDirectorDashboardController extends Controller
      * 2. Zones de Collecte
      * Performance des zones géographiques et des collecteurs sur le terrain.
      */
-    public function zonesIndex(Request $request, $agencyId)
+    public function zonesIndex(Request $request)
     {
+        $user = Auth::user();
+
+        // 1. On récupère la clé de l'agence/structure de l'utilisateur connecté
+        // (Ajustez 'structure_id' si le champ sur l'utilisateur s'appelle différemment)
+        $structureId = $user->structure_id ?? $user->agency_id;
+
+        // Récupérer la liste des agents de collecte de l'agence pour la vue (modale)
+        $collectors = User::where('structure_id', $structureId)
+            ->role('Collectrice') // Décommentez si vous utilisez Spatie/Roles
+            ->select('id', 'name', 'phone')
+            ->get();
+
+
+        // 2. Sécurité : Si l'utilisateur n'a pas de structure/agence assignée
+        if (!$structureId) {
+            return view('directeur.zones.index', [
+                'total_zones' => 0,
+                'totalCollectedToday' => 0,
+                'zones' => collect([]),
+                'collectors' => collect([]),
+                'error' => 'Aucune agence/structure n\'est assignée à votre compte.'
+            ]);
+        }
+
         $today = Carbon::today();
 
-        $zones = Zone::where('agency_id', $agencyId)
+        // 3. On filtre par 'structure_id' au lieu de 'agency_id'
+        $zones = Zone::where('structure_id', $structureId) // <-- Modification ici
             ->withCount(['clients as active_clients_count'])
-            ->with(['collector:id,name,phone'])
+            ->with(['manager:id,name,phone'])
             ->get()
             ->map(function ($zone) use ($today) {
-                // Total collecté aujourd'hui dans cette zone
-                $collectedToday = DB::table('collections')
-                    ->where('collection_zone_id', $zone->id)
-                    ->whereDate('collected_at', $today)
-                    ->sum('amount');
+
+                $collectedToday = 0;
+
+                // Si un agent de collecte est affecté à cette zone
+                if ($zone->collector_id) {
+                    // On somme les dépôts réalisés aujourd'hui par cet agent
+                    $collectedToday = DB::table('transactions')
+                        ->where('performed_by', $zone->collector_id) // Agent de la zone
+                        ->where('type', 'deposit')                   // Type d'opération (ex: dépôt)
+                        ->whereDate('created_at', $today)            // Date du jour
+                        ->sum('amount');
+                }
 
                 return [
                     'id' => $zone->id,
                     'name' => $zone->name,
-                    'collector' => $zone->collector ? $zone->collector->name : 'Unassigned',
+                    'manager' => $zone->manager ? $zone->manager->name : 'Non assigné',
                     'active_clients' => $zone->active_clients_count,
                     'collected_today' => $collectedToday,
-                    'monthly_target' => $zone->monthly_target,
-                    'completion_rate' => $zone->monthly_target > 0
+                    'monthly_target' => $zone->monthly_target ?? 0,
+                    'completion_rate' => ($zone->monthly_target ?? 0) > 0
                         ? round(($collectedToday / $zone->monthly_target) * 100, 2)
                         : 0,
                 ];
             });
 
-        return response()->json([
-            'status' => 'success',
-            'data' => [
-                'total_zones' => $zones->count(),
-                'total_collected_today' => $zones->sum('collected_today'),
-                'zones' => $zones
-            ]
+        return view('directeur.zones.index', [
+            'total_zones' => $zones->count(),
+            'totalCollectedToday' => $zones->sum('collected_today'),
+            'zones' => $zones,
+            'collectors' => $collectors
         ]);
+    }
+
+    public function zonesStore(Request $request)
+    {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'manager_id' => 'nullable|exists:users,id',
+            'monthly_target' => 'nullable|numeric|min:0',
+        ]);
+
+        $user = Auth::user();
+        $structureId = $user->structure_id ?? $user->agency_id;
+
+        // 1. Génération d'un code unique automatique (ex: ZN-B8A2F)
+        $code = 'ZN-' . strtoupper(Str::random(5));
+
+        // 2. Enregistrement en base de données
+        Zone::create([
+            'code' => $code, // <-- Champ obligatoire fourni ici
+            'name' => $request->name,
+            'description' => $request->description ?? null,
+            'structure_id' => $structureId, // <-- Renseigne la structure parente
+            'manager_id' => $request->manager_id,
+            'monthly_target' => $request->monthly_target ?? 0,
+            'is_active' => true,
+        ]);
+
+        return redirect()->back()->with('success', 'Zone de collecte créée avec succès.');
+    }
+
+    public function zonesAssign(Request $request)
+    {
+        $request->validate([
+            'zone_id' => 'required|exists:zones,id',
+            'manager_id' => 'required|exists:users,id',
+        ]);
+
+        $zone = Zone::findOrFail($request->zone_id);
+        $zone->update(['manager_id' => $request->manager_id]);
+
+        return redirect()->back()->with('success', 'Agent affecté à la zone avec succès.');
     }
 
     /**
