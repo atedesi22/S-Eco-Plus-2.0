@@ -10,13 +10,14 @@ use App\Models\Product;
 use App\Models\Sanction;
 use App\Models\Structure;
 use App\Models\Transaction;
-use App\Models\User;
+// use App\Models\User;
 use App\Models\Zone;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -38,6 +39,7 @@ class User extends Authenticatable
             'agency_id',
             'zone_id',
             'structure_id',
+            'collector_id',
             'mfa_enabled',
             'status',
             'profile_photo'
@@ -167,4 +169,27 @@ class User extends Authenticatable
             'password' => hash('sha256', '0000') // Ou Hash::make('0000') selon ta config
         ]);
     }
+
+    /**
+     * Les clients gérés par cet agent/gestionnaire
+     */
+    public function managedClients(): HasMany
+    {
+        // Ajustez 'collector_id' ou 'agent_id' selon le nom de votre clé étrangère dans la table clients/users
+        return $this->hasMany(User::class, 'collector_id');
+    }
+
+    public function collector()
+    {
+        return $this->belongsTo(User::class, 'collector_id');
+    }
+
+    /**
+     * Les prêts actifs gérés par cet agent
+     */
+    // public function activeLoans(): HasMany
+    // {
+    //     // Ajustez 'agent_id' et le statut 'active' selon votre table loans/credits
+    //     return $this->hasMany(Loan::class, 'agent_id')->where('status', 'active');
+    // }
 }

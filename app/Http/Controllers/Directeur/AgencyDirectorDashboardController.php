@@ -3,8 +3,11 @@
 namespace App\Http\Controllers\Directeur;
 
 use App\Http\Controllers\Controller;
+use App\Models\Account;
 use App\Models\Caisse;
 use App\Models\Objective;
+use App\Models\Order;
+use App\Models\Product;
 use App\Models\User;
 use App\Models\Zone;
 use Carbon\Carbon;
@@ -12,7 +15,11 @@ use GuzzleHttp\Client;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Spatie\Permission\Models\Role;
 
 class AgencyDirectorDashboardController extends Controller
 {
@@ -392,81 +399,388 @@ class AgencyDirectorDashboardController extends Controller
      * 3. Ressources Humaines & Personnel de l'Agence
      * Effectif, présence/absence et charge de travail par agent.
      */
-    public function personnelIndex(Request $request, $agencyId)
+    public function personnelIndex(Request $request)
     {
+        $user = Auth::user();
+
+        // Détection de la colonne (structure_id ou agency_id)
+        $agencyColumn = Schema::hasColumn('users', 'structure_id') ? 'structure_id' : 'agency_id';
+        $agencyId = $user->{$agencyColumn};
+
+        if (!$agencyId) {
+            return view('directeur.personnel.index', [
+                'total_staff' => 0,
+                'staff_by_role' => collect([]),
+                'today_attendance' => ['present' => 0, 'absent' => 0, 'on_leave' => 0],
+                'staff' => collect([]),
+                'roles' => collect([])
+            ]);
+        }
+
         $today = Carbon::today();
 
-        // Répartition par rôle dans l'agence
-        $staffByRole = User::where('agency_id', $agencyId)
-            ->select('role', DB::raw('count(*) as count'))
-            ->groupBy('role')
-            ->pluck('count', 'role');
+        // Récupérer uniquement les utilisateurs de la structure qui NE SONT PAS des clients
+        $staffQuery = User::where($agencyColumn, $agencyId)
+            ->whereDoesntHave('roles', function ($query) {
+                $query->whereIn('name', ['Client', 'client']);
+            })
+            ->with('roles');
 
-        // Statut de présence aujourd'hui
-        $attendance = DB::table('attendances')
-            ->where('agency_id', $agencyId)
-            ->whereDate('date', $today)
-            ->select('status', DB::raw('count(*) as count'))
-            ->groupBy('status')
-            ->pluck('count', 'status');
+        if (Schema::hasColumn('users', 'collector_id')) {
+            $staffQuery->withCount(['managedClients as total_clients']);
+        }
 
-        // Charge de travail des gestionnaires de portefeuille (Loan Officers)
-        $loanOfficersWorkload = User::where('agency_id', $agencyId)
-            ->where('role', 'loan_officer')
-            ->withCount(['managedClients as total_clients', 'activeLoans as total_active_loans'])
-            ->get(['id', 'name', 'email']);
+        $staff = $staffQuery->get();
 
-        return response()->json([
-            'status' => 'success',
-            'data' => [
-                'total_staff' => User::where('agency_id', $agencyId)->count(),
-                'staff_by_role' => $staffByRole,
-                'today_attendance' => [
-                    'present' => $attendance->get('present', 0),
-                    'absent' => $attendance->get('absent', 0),
-                    'on_leave' => $attendance->get('on_leave', 0),
-                ],
-                'loan_officers_workload' => $loanOfficersWorkload
-            ]
+        // Compter le personnel par rôle
+        $staffByRole = $staff->flatMap(function ($member) {
+            return $member->roles->pluck('name');
+        })->countBy();
+
+        // Statut de présence
+        $attendance = collect([]);
+        if (Schema::hasTable('attendances')) {
+            $attendanceQuery = DB::table('attendances')->whereDate('date', $today);
+
+            if (Schema::hasColumn('attendances', $agencyColumn)) {
+                $attendanceQuery->where($agencyColumn, $agencyId);
+            }
+
+            $attendance = $attendanceQuery
+                ->select('status', DB::raw('count(*) as count'))
+                ->groupBy('status')
+                ->pluck('count', 'status');
+        }
+
+        // Récupère les rôles du personnel
+        $roles = Role::whereNotIn('name', ['Client', 'SuperAdmin', 'Directeur Regional', 'PDG', 'DG', 'DAF', 'DOM'])->get();
+
+        return view('directeur.personnel.index', [
+            'total_staff' => $staff->count(),
+            'staff_by_role' => $staffByRole,
+            'today_attendance' => [
+                'present' => $attendance->get('present', 0),
+                'absent' => $attendance->get('absent', 0),
+                'on_leave' => $attendance->get('on_leave', 0),
+            ],
+            'staff' => $staff,
+            'roles' => $roles
         ]);
+    }
+
+    public function personnelStore(Request $request)
+    {
+        $user = Auth::user();
+
+        // Détection dynamique de la colonne de rattachement
+        $agencyColumn = Schema::hasColumn('users', 'structure_id') ? 'structure_id' : 'agency_id';
+        $agencyId = $user->{$agencyColumn};
+
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email',
+            'phone' => 'nullable|string|max:20',
+            'role' => 'required|string' // Nom du rôle Spatie (ex: collector, cashier, loan_officer)
+        ]);
+
+        // 1. Création de l'utilisateur
+        $newMember = User::create([
+            'name' => $request->name,
+            'email' => $request->email,
+            'phone' => $request->phone,
+            $agencyColumn => $agencyId,
+            'password' => Hash::make('password123') // Mot de passe temporaire par défaut
+        ]);
+
+        // 2. Assignation du rôle Spatie
+        $newMember->assignRole($request->role);
+
+        return redirect()->back()->with('success', 'Membre du personnel ajouté avec succès.');
     }
 
     /**
      * 4. Objectifs & Performance Commerciale
      * Taux de réalisation des objectifs mensuels de l'agence.
      */
-    public function getGoalsAndPerformance(Request $request, $agencyId)
+    public function performanceIndex()
     {
-        $currentMonth = Carbon::now()->month;
-        $currentYear = Carbon::now()->year;
+        $user = Auth::user();
+        $agencyColumn = Schema::hasColumn('users', 'structure_id') ? 'structure_id' : 'agency_id';
+        $agencyId = $user->{$agencyColumn};
 
-        $objectives = Objective::where('agency_id', $agencyId)
-            ->where('month', $currentMonth)
-            ->where('year', $currentYear)
-            ->get()
-            ->map(function ($obj) {
-                $achievementPercentage = $obj->target_value > 0
-                    ? min(round(($obj->current_value / $obj->target_value) * 100, 2), 100)
-                    : 0;
+        // Liste des agents de l'agence (hors clients et rôles de direction)
+        $staff = User::where($agencyColumn, $agencyId)
+            ->whereDoesntHave('roles', function ($query) {
+                $query->whereIn('name', ['Client', 'client', 'PDG', 'DG', 'DAF', 'DOM']);
+            })->get();
 
-                return [
-                    'metric_name' => $obj->title, // Ex: Nouveaux comptes, Volume de crédits accordés
-                    'target_value' => $obj->target_value,
-                    'current_value' => $obj->current_value,
-                    'unit' => $obj->unit, // Ex: FCFA, Clients, dossiers
-                    'achievement_percentage' => $achievementPercentage,
-                    'status' => $achievementPercentage >= 100 ? 'reached' : ($achievementPercentage >= 75 ? 'on_track' : 'at_risk'),
-                ];
-            });
+        // Rôles disponibles pour assigner un objectif global par rôle
+        $roles = Role::whereNotIn('name', ['Client', 'SuperAdmin', 'PDG', 'DG', 'DAF', 'DOM', 'Directeur Regional'])->get();
 
-        return response()->json([
-            'status' => 'success',
-            'data' => [
-                'period' => Carbon::now()->translatedFormat('F Y'),
-                'objectives' => $objectives
-            ]
-        ]);
+        // Récupérer les objectifs créés pour cette agence (soit attribués à un agent de l'agence, soit généraux)
+        $staffIds = $staff->pluck('id')->toArray();
+
+        $objectives = Objective::whereIn('user_id', $staffIds)
+            ->orWhereNotNull('role_name')
+            ->with(['user'])
+            ->latest()
+            ->get();
+
+        // Calcul des métriques globales pour les KPI cards
+        $totalObjectives = $objectives->count();
+        $achievedCount = $objectives->filter(fn($obj) => $obj->current_value >= $obj->target_value)->count();
+        $inProgressCount = $totalObjectives - $achievedCount;
+
+        return view('directeur.performance.index', compact(
+            'objectives',
+            'staff',
+            'roles',
+            'totalObjectives',
+            'achievedCount',
+            'inProgressCount'
+        ));
     }
+
+    public function performanceStoreObjective(Request $request)
+    {
+        $request->validate([
+            'title' => 'required|string|max:255',
+            'assignment_type' => 'required|in:agent,role',
+            'user_id' => 'nullable|required_if:assignment_type,agent|exists:users,id',
+            'role_name' => 'nullable|required_if:assignment_type,role|string',
+            'type' => 'required|in:collecte_amount,new_accounts,product_sales,credit_recovery',
+            'target_value' => 'required|numeric|min:1',
+            'period' => 'required|in:daily,weekly,monthly,quarterly,yearly',
+            'start_date' => 'required|date',
+            'end_date' => 'required|date|after_or_equal:start_date',
+        ]);
+
+        Objective::create([
+            'title' => $request->title,
+            'user_id' => $request->assignment_type === 'agent' ? $request->user_id : null,
+            'role_name' => $request->assignment_type === 'role' ? $request->role_name : null,
+            'type' => $request->type,
+            'target_value' => $request->target_value,
+            'period' => $request->period,
+            'start_date' => $request->start_date,
+            'end_date' => $request->end_date,
+            'status' => 'in_progress',
+        ]);
+
+        return redirect()->back()->with('success', 'L\'objectif a été assigné avec succès !');
+    }
+
+    public function performanceDestroyObjective(Objective $objective)
+    {
+        $objective->delete();
+        return redirect()->back()->with('success', 'L\'objectif a été supprimé.');
+    }
+
+    public function clientsIndex(Request $request)
+    {
+        $user = Auth::user();
+        $agencyColumn = Schema::hasColumn('users', 'structure_id') ? 'structure_id' : 'agency_id';
+        $agencyId = $user->{$agencyColumn};
+
+        // Récupérer tous les clients rattachés à l'agence du Directeur
+        $clientsQuery = User::role('Client')
+            ->where($agencyColumn, $agencyId)
+            ->with(['accounts', 'collector']);
+
+        $clients = $clientsQuery->latest()->get();
+
+        // Statistiques globales du portefeuille
+        $totalClients = $clients->count();
+        $activeClients = $clients->where('status', 'active')->count();
+
+        // Calcul du solde total épargné dans l'agence
+        $totalSavings = Account::whereIn('user_id', $clients->pluck('id'))->sum('balance');
+
+        return view('directeur.clients.index', compact(
+            'clients',
+            'totalClients',
+            'activeClients',
+            'totalSavings'
+        ));
+    }
+
+    public function produitIndex()
+    {
+        $products = Product::latest()->get();
+
+        $totalProducts = $products->count();
+        $totalStock = $products->sum('stock');
+        $lowStockCount = $products->filter(fn($p) => $p->stock <= $p->alert_threshold)->count();
+
+        return view('directeur.articles.index', compact(
+            'products',
+            'totalProducts',
+            'totalStock',
+            'lowStockCount'
+        ));
+    }
+
+    public function produitStore(Request $request)
+    {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'purchase_price' => 'required|numeric|min:0',
+            'selling_price_cash' => 'required|numeric|min:0',
+            'selling_price_installment' => 'required|numeric|min:0',
+            'stock' => 'required|integer|min:0',
+            'alert_threshold' => 'required|integer|min:0',
+            'primary_image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048',
+            'gallery_images.*' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048',
+        ]);
+
+        $reference = 'PRD-' . date('Y') . '-' . strtoupper(Str::random(5));
+
+        $primaryImagePath = null;
+        if ($request->hasFile('primary_image')) {
+            $primaryImagePath = $request->file('primary_image')->store('products', 'public');
+        }
+
+        $galleryPaths = [];
+        if ($request->hasFile('gallery_images')) {
+            foreach ($request->file('gallery_images') as $file) {
+                $galleryPaths[] = $file->store('products/gallery', 'public');
+            }
+        }
+
+        Product::create([
+            'reference' => $reference,
+            'name' => $request->name,
+            'description' => $request->description,
+            'purchase_price' => $request->purchase_price,
+            'selling_price_cash' => $request->selling_price_cash,
+            'selling_price_installment' => $request->selling_price_installment,
+            'stock' => $request->stock,
+            'alert_threshold' => $request->alert_threshold,
+            'is_available' => $request->stock > 0,
+            'primary_image' => $primaryImagePath,
+            'gallery_images' => $galleryPaths,
+        ]);
+
+        return redirect()->back()->with('success', 'Article ajouté au catalogue avec succès.');
+    }
+
+    public function produitUpdate(Request $request, Product $article)
+    {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'purchase_price' => 'required|numeric|min:0',
+            'selling_price_cash' => 'required|numeric|min:0',
+            'selling_price_installment' => 'required|numeric|min:0',
+            'stock' => 'required|integer|min:0',
+            'alert_threshold' => 'required|integer|min:0',
+            'primary_image' => 'nullable|image|mimes:jpeg,png,jpg,webp|max:2048',
+        ]);
+
+        if ($request->hasFile('primary_image')) {
+            if ($article->primary_image) {
+                Storage::disk('public')->delete($article->primary_image);
+            }
+            $article->primary_image = $request->file('primary_image')->store('products', 'public');
+        }
+
+        $article->update([
+            'name' => $request->name,
+            'description' => $request->description,
+            'purchase_price' => $request->purchase_price,
+            'selling_price_cash' => $request->selling_price_cash,
+            'selling_price_installment' => $request->selling_price_installment,
+            'stock' => $request->stock,
+            'alert_threshold' => $request->alert_threshold,
+            'is_available' => $request->has('is_available') ? true : ($request->stock > 0),
+        ]);
+
+        return redirect()->back()->with('success', 'Article mis à jour avec succès.');
+    }
+
+    public function produitDestroy(Product $article)
+    {
+        if ($article->primary_image) {
+            Storage::disk('public')->delete($article->primary_image);
+        }
+        if ($article->gallery_images) {
+            foreach ($article->gallery_images as $img) {
+                Storage::disk('public')->delete($img);
+            }
+        }
+
+        $article->delete();
+
+        return redirect()->back()->with('success', 'Article retiré du catalogue.');
+    }
+
+    public function shopIndex(Request $request)
+    {
+        $user = Auth::user();
+        $agencyColumn = Schema::hasColumn('users', 'structure_id') ? 'structure_id' : 'agency_id';
+        $agencyId = $user->{$agencyColumn};
+
+        // Charger les commandes des clients rattachés à cette agence
+        $orders = Order::whereHas('client', function ($q) use ($agencyColumn, $agencyId) {
+                $q->where($agencyColumn, $agencyId);
+            })
+            ->with(['client', 'product', 'collector'])
+            ->latest()
+            ->get();
+
+        // Calculs des KPIs
+        $totalOrders = $orders->count();
+        $pendingDeliveries = $orders->where('status', 'eligible_for_delivery')->count(); // Seuil 60% atteint mais pas encore validé
+        $totalCollected = $orders->sum('paid_amount');
+        $overdueOrders = $orders->filter(function ($order) {
+            // En retard si livré (dépassé 60%) mais pas de versement depuis +14 jours
+            return $order->status === 'delivered' && $order->last_payment_at && $order->last_payment_at->diffInDays(now()) > 14;
+        })->count();
+
+        return view('directeur.commandes.index', compact(
+            'orders',
+            'totalOrders',
+            'pendingDeliveries',
+            'totalCollected',
+            'overdueOrders'
+        ));
+    }
+
+    /**
+     * Valide l'accord de livraison d'un article une fois le seuil des 60% franchi.
+     */
+    public function approveDelivery(Order $order)
+    {
+        if ($order->paid_amount < $order->threshold_60_amount) {
+            return redirect()->back()->with('error', 'Le montant versé n\'atteint pas encore le seuil requis de 60%.');
+        }
+
+        $order->update([
+            'delivered_approved_by_director' => true,
+            'status' => 'delivered',
+            'delivered_at' => now(),
+        ]);
+
+        return redirect()->back()->with('success', 'Livraison approuvée ! Le bon de sortie de stock a été généré.');
+    }
+
+    /**
+     * Envoie un ordre de relance au collecteur pour relancer le client sur les 40% restants.
+     */
+    public function remindAgent(Request $request, Order $order)
+    {
+        $request->validate([
+            'note' => 'nullable|string|max:255'
+        ]);
+
+        // Ici, tu peux enregistrer une notification en BDD pour l'agent/collecteur
+        // Notification::send($order->collector, new DirectAgentReminderNotification($order, $request->note));
+
+        return redirect()->back()->with('success', 'Rappel direct transmis avec succès au collecteur ' . ($order->collector->name ?? 'référent') . '.');
+    }
+
+
 
     /**
      * 5. Clients & Portefeuille

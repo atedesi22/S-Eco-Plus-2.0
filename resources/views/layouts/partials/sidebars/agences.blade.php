@@ -44,7 +44,7 @@
             </a>
 
             <a href="{{ route('directeur.zones.index', ['agencyId' => Auth::user()->agency_id]) }}"
-                class="flex items-center px-4 py-2 space-x-3 text-sm transition rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white">
+                class="flex items-center px-4 py-2 space-x-3 text-sm transition rounded-xl {{ request()->routeIs('directeur.zones.*') ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
                 <i class="bi bi-geo-alt-fill text-slate-500"></i>
                 <span>Zones de Collecte</span>
             </a>
@@ -52,14 +52,14 @@
             <!-- 3. GESTION DES ÉQUIPES -->
             <div class="pt-4 pb-1 px-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">Ressources Humaines</div>
 
-            <a href="#"
-               class="flex items-center px-4 py-2 space-x-3 text-sm transition rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white">
+            <a href="{{ route('directeur.personnel.index') }}"
+                class="flex items-center px-4 py-2 space-x-3 text-sm transition rounded-xl {{ request()->routeIs('directeur.personnel.*') ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
                 <i class="bi bi-people-fill text-slate-500"></i>
                 <span>Personnel de l'Agence</span>
             </a>
 
-            <a href="#"
-               class="flex items-center px-4 py-2 space-x-3 text-sm transition rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white">
+            <a href="{{ route('directeur.performance.index') }}"
+               class="flex items-center px-4 py-2 space-x-3 text-sm transition rounded-xl {{ request()->routeIs('directeur.performance.*') ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
                 <i class="bi bi-award text-slate-500"></i>
                 <span>Objectifs & Performance</span>
             </a>
@@ -67,20 +67,20 @@
             <!-- 4. PORTEFEUILLE CLIENTS & BOUTIQUE -->
             <div class="pt-4 pb-1 px-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">Clients & Commerce</div>
 
-            <a href="#"
-               class="flex items-center px-4 py-2 space-x-3 text-sm transition rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white">
+            <a href="{{ route('directeur.clients.index') }}"
+                class="flex items-center px-4 py-2 space-x-3 text-sm transition rounded-xl {{ request()->routeIs('directeur.clients.*') ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
                 <i class="bi bi-person-lines-fill text-slate-500"></i>
                 <span>Portefeuille Clients</span>
             </a>
 
-            <a href="#"
-               class="flex items-center px-4 py-2 space-x-3 text-sm transition rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white">
+            <a href="{{ route('directeur.articles.index') }}"
+                class="flex items-center px-4 py-2 space-x-3 text-sm transition rounded-xl {{ request()->routeIs('directeur.articles.*') ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
                 <i class="bi bi-shop text-slate-500"></i>
                 <span>Articles Boutique</span>
             </a>
 
-            <a href="#"
-               class="flex items-center px-4 py-2 space-x-3 text-sm transition rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white">
+            <a href="{{ route('directeur.commandes.index') }}"
+                class="flex items-center px-4 py-2 space-x-3 text-sm transition rounded-xl {{ request()->routeIs('directeur.commandes.*') ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
                 <i class="bi bi-cart-check text-slate-500"></i>
                 <span>Commandes Clients</span>
             </a>

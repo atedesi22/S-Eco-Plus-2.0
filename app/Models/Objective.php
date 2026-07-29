@@ -59,19 +59,19 @@ class Objective extends Model
 
         switch ($this->type) {
             case 'new_tontines': // Tontines ouvertes sur le terrain par les agents
-                return CustomerTontine::whereIn('performed_by', $userIds)
+                return Transaction::whereIn('performed_by', $userIds)
                     ->whereBetween('created_at', [$this->start_date, $this->end_date])
                     ->count();
 
             case 'product_sales': // Articles de la boutique vendus par les agents
                 return Transaction::whereIn('performed_by', $userIds)
-                    ->where('type', 'vente_boutique')
+                    ->where('type', 'product_payment')
                     ->whereBetween('created_at', [$this->start_date, $this->end_date])
                     ->sum('quantity');
 
             case 'collecte_amount': // Montant total des collectes effectuées
                 return Transaction::whereIn('performed_by', $userIds)
-                    ->where('type', 'collecte_tontine')
+                    ->where('type', 'deposit')
                     ->whereBetween('created_at', [$this->start_date, $this->end_date])
                     ->sum('amount');
 

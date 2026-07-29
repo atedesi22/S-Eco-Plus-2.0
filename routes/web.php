@@ -180,10 +180,18 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/clients', [AgencyDirectorDashboardController::class, 'clientsIndex'])->name('clients.index');
 
             // Module Boutique Agence
-            Route::prefix('shop')->name('shop.')->group(function () {
-                Route::get('/articles', [AgencyDirectorDashboardController::class, 'shopArticles'])->name('articles');
-                Route::get('/commandes', [AgencyDirectorDashboardController::class, 'shopOrders'])->name('orders');
-            });
+            // Route::prefix('shop')->name('shop.')->group(function () {
+                Route::get('/articles', [AgencyDirectorDashboardController::class, 'produitIndex'])->name('articles.index');
+                Route::post('/articles', [AgencyDirectorDashboardController::class, 'produitStore'])->name('articles.store');
+                Route::put('/articles/{article}', [AgencyDirectorDashboardController::class, 'produitUpdate'])->name('articles.update');
+                Route::delete('/articles/{article}', [AgencyDirectorDashboardController::class, 'produitDestroy'])->name('articles.destroy');
+
+
+                Route::get('/commandes', [AgencyDirectorDashboardController::class, 'shopIndex'])->name('commandes.index');
+                Route::post('/commandes/{order}/approve-delivery', [AgencyDirectorDashboardController::class, 'approveDelivery'])->name('commandes.approve-delivery');
+                Route::post('/commandes/{order}/remind-agent', [AgencyDirectorDashboardController::class, 'remindAgent'])->name('commandes.remind-agent');
+
+            // });
 
             // Finances, Personnel & Zones
             Route::get('/caisses', [AgencyDirectorDashboardController::class, 'caissesIndex'])->name('caisses.index');
@@ -191,11 +199,19 @@ Route::middleware(['auth'])->group(function () {
             Route::post('/caisses/{id}/assign', [AgencyDirectorDashboardController::class, 'caissesAssign'])->name('caisses.assign');
             Route::post('/caisses/transfer', [AgencyDirectorDashboardController::class, 'caissesTransfer'])->name('caisses.transfer');
 
+            // Module Personnel de l'Agence
             Route::get('/personnel', [AgencyDirectorDashboardController::class, 'personnelIndex'])->name('personnel.index');
-            // Module Zones de Collecte
+            Route::post('/personnel', [AgencyDirectorDashboardController::class, 'personnelStore'])->name('personnel.store');
+
+
+                // Module Zones de Collecte
             Route::get('/zones', [AgencyDirectorDashboardController::class, 'zonesIndex'])->name('zones.index');
             Route::post('/zones', [AgencyDirectorDashboardController::class, 'zonesStore'])->name('zones.store');
             Route::post('/zones/assign', [AgencyDirectorDashboardController::class, 'zonesAssign'])->name('zones.assign');
+
+            Route::get('/performance', [AgencyDirectorDashboardController::class, 'performanceIndex'])->name('performance.index');
+            Route::post('/performance/objectives', [AgencyDirectorDashboardController::class, 'performanceStoreObjective'])->name('performance.objectives.store');
+            Route::delete('/performance/objectives/{objective}', [AgencyDirectorDashboardController::class, 'performanceDestroyObjective'])->name('performance.objectives.destroy');
 
     });
 
