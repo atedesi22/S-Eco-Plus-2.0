@@ -13,17 +13,18 @@ class SubAccount extends Model
     use HasFactory;
 
     protected $fillable = [
-    'account_id',
-    'tontine_plan_id', // <-- Ajoute cette ligne
-    'name',
-    'code',
-    'balance',
-    'target_amount',
-    'color',
-    'status',
-];
+        'account_id',
+        'tontine_plan_id', // <-- Ajoute cette ligne
+        'name',
+        'code',
+        'balance',
+        'target_amount',
+        'color',
+        'status',
+        'user_id'
+    ];
 
-/**
+    /**
      * Relation : Un sous-compte appartient à un plan de tontine spécifique.
      */
     public function plan()

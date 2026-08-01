@@ -25,6 +25,7 @@ return new class extends Migration
             // Gestion de stock
             $table->integer('stock')->default(0);
             $table->integer('alert_threshold')->default(5); // Seuil d'alerte stock bas
+            // $table->foreignId('agency_id')->nullable()->constrained('agencies')->onDelete('cascade');
 
             $table->boolean('is_available')->default(true);
             // --- NOUVELLES COLONNES MULTIMÉDIAS ---

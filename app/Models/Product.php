@@ -19,7 +19,9 @@ class Product extends Model
         'selling_price_cash',         // Ajouté
         'selling_price_installment',  // Ajouté
         'stock',
+        'agency_id',
         'alert_threshold',
+        'agency_id',
         'is_available',
         'primary_image',
         'gallery_images'
@@ -58,5 +60,13 @@ class Product extends Model
         return $this->belongsToMany(User::class, 'product_sales')
                     ->withPivot('quantity', 'total_price', 'performed_by')
                     ->withTimestamps();
+    }
+
+    /**
+     * Un produit appartient à une agence.
+     */
+    public function agency()
+    {
+        return $this->belongsTo(Agency::class);
     }
 }

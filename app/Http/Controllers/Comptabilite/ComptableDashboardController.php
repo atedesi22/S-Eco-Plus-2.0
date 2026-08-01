@@ -4,13 +4,17 @@ namespace App\Http\Controllers\Comptabilite;
 
 use App\Http\Controllers\Controller;
 use App\Models\Account;
+use App\Models\Order;
+use App\Models\Product;
 use App\Models\Structure;
+use App\Models\SubAccount;
 use App\Models\User;
 use App\Models\Zone;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class ComptableDashboardController extends Controller
@@ -37,11 +41,9 @@ class ComptableDashboardController extends Controller
                 DB::raw("COALESCE(SUM(CASE WHEN type = 'withdrawal' THEN amount ELSE 0 END), 0) as total_retraits")
             )->first();
 
-        // 4. 10 Dernières Transactions au niveau de l'agence (AVEC LES JOINTURES CORRECTES)
+        // 4. 10 Dernières Transactions au niveau de l'agence
         $recentTransactions = DB::table('transactions')
-            // Jointure pour retrouver l'agent/utilisateur qui a effectué l'action
             ->leftJoin('users as agent', 'transactions.performed_by', '=', 'agent.id')
-            // Jointure pour retrouver le client via son compte (ou directement via account_id selon ton model)
             ->leftJoin('users as client', 'transactions.account_id', '=', 'client.id')
             ->whereIn('transactions.performed_by', $agencyUserIds)
             ->orWhereIn('transactions.account_id', $agencyUserIds)
@@ -54,24 +56,60 @@ class ComptableDashboardController extends Controller
             ->take(10)
             ->get();
 
-        // 5. Charger la liste des clients de l'agence avec calcul de solde
+        // 5. Charger la liste des clients de l'agence avec détails des comptes et sous-comptes
         $clientsAgence = User::role('Client')
             ->where('structure_id', $agency->id)
             ->select('id', 'name', 'phone')
             ->get()
             ->map(function ($client) {
-                // Note : On utilise account_id ou performed_by selon où est stocké l'ID du client
-                $depots = DB::table('transactions')
-                    ->where('account_id', $client->id)
+                // 1. Récupérer tous les comptes principaux du client
+                $accounts = DB::table('accounts')->where('user_id', $client->id)->get();
+                $accountIds = $accounts->pluck('id')->toArray();
+
+                // Calcul du solde du compte principal
+                $depotsMain = DB::table('transactions')
+                    ->whereIn('account_id', $accountIds)
+                    ->whereNull('sub_account_id')
                     ->where('type', 'deposit')
                     ->sum('amount');
 
-                $retraits = DB::table('transactions')
-                    ->where('account_id', $client->id)
+                $retraitsMain = DB::table('transactions')
+                    ->whereIn('account_id', $accountIds)
+                    ->whereNull('sub_account_id')
                     ->where('type', 'withdrawal')
                     ->sum('amount');
 
-                $client->balance = $depots - $retraits;
+                $fraisMain = DB::table('transactions')
+                    ->whereIn('account_id', $accountIds)
+                    ->whereNull('sub_account_id')
+                    ->where('type', 'withdrawal')
+                    ->sum('fees');
+
+                $firstAccount = $accounts->first();
+                $client->main_account_name = $firstAccount ? ($firstAccount->type ?? 'Tontine Principal') : 'Compte Non Trouvé';
+                $client->main_balance = $depotsMain - ($retraitsMain + $fraisMain);
+
+                // 2. 🟢 CORRECTION : Récupérer les sous-comptes via les account_ids
+                $client->sub_accounts = DB::table('sub_accounts')
+                    ->whereIn('account_id', $accountIds)
+                    ->get()
+                    ->map(function ($sub) {
+                        $depotsSub = DB::table('transactions')->where('sub_account_id', $sub->id)->where('type', 'deposit')->sum('amount');
+                        $retraitsSub = DB::table('transactions')->where('sub_account_id', $sub->id)->where('type', 'withdrawal')->sum('amount');
+                        $fraisSub = DB::table('transactions')->where('sub_account_id', $sub->id)->where('type', 'withdrawal')->sum('fees');
+
+                        // Calcul si balance est null/inexistant
+                        $calculatedBalance = $depotsSub - ($retraitsSub + $fraisSub);
+                        $sub->balance = (isset($sub->balance) && $sub->balance > 0) ? $sub->balance : $calculatedBalance;
+
+                        return $sub;
+                    });
+
+                // 3. Calcul du Solde Total
+                $subAccountsTotal = $client->sub_accounts->sum('balance');
+                $client->total_balance = $client->main_balance + $subAccountsTotal;
+                $client->balance = $client->total_balance;
+
                 return $client;
             });
 
@@ -88,77 +126,94 @@ class ComptableDashboardController extends Controller
      */
     public function storeTransaction(Request $request)
     {
+        // 1. Validation de la requête (incluant sub_account_id)
         $request->validate([
-            'user_id' => 'required|exists:users,id', // ID du Client sélectionné
-            'type'    => 'required|in:deposit,withdrawal',
-            'amount'  => 'required|numeric|min:100',
+            'user_id'        => 'required|exists:users,id',
+            'sub_account_id' => 'nullable|exists:sub_accounts,id',
+            'type'           => 'required|in:deposit,withdrawal',
+            'amount'         => 'required|numeric|min:100',
         ]);
 
         $comptable = Auth::user();
         $typeLabel = $request->type === 'deposit' ? 'Dépôt' : 'Retrait';
 
-        // 1. Récupérer le compte (Account) associé au client
-        $account = DB::table('accounts')->where('user_id', $request->user_id)->first();
+        // 2. Récupération du compte principal de l'utilisateur
+        $account = Account::where('user_id', $request->user_id)->first();
 
-        // return $account;
-
-        // Sécurité au cas où le client n'a pas encore de compte créé dans la table `accounts`
         if (!$account) {
             return redirect()->back()->with('error', 'Erreur : Aucun compte bancaire/épargne associé à ce client.');
         }
 
-            // 2. Calcul des frais de retrait (500 XAF / tranche de 25 000 XAF)
+        // 3. Calcul des frais de retrait (500 XAF par tranche de 25 000 XAF)
         $fees = 0;
         if ($request->type === 'withdrawal') {
             $tranches = ceil($request->amount / 25000);
             $fees = $tranches * 500;
         }
 
-        // 3. Exécution sécurisée en Transaction SQL
+        $totalADebiter = $request->amount + $fees;
+
+        // 4. Exécution de la transaction SQL
         try {
-            DB::transaction(function () use ($request, $account, $comptable, $fees, $typeLabel) {
+            DB::transaction(function () use ($request, $account, $comptable, $fees, $typeLabel, $totalADebiter) {
 
-                // Vérification stricte du solde pour un retrait (Montant + Frais)
+                $subAccountId = $request->input('sub_account_id');
+                $subAccount = null;
+
+                if ($subAccountId) {
+                    // Charger le sous-compte et vérifier qu'il appartient bien au compte principal
+                    $subAccount = SubAccount::where('id', $subAccountId)
+                        ->where('account_id', $account->id)
+                        ->firstOrFail();
+                }
+
+                // Vérification du solde en cas de retrait
                 if ($request->type === 'withdrawal') {
-                    $depots = DB::table('transactions')
-                        ->where('account_id', $account->id)
-                        ->where('type', 'deposit')
-                        ->sum('amount');
+                    $soldeDisponible = $subAccount ? $subAccount->balance : $account->balance;
 
-                    $retraits = DB::table('transactions')
-                        ->where('account_id', $account->id)
-                        ->where('type', 'withdrawal')
-                        ->sum('amount');
-
-                    $soldeDispo = $depots - $retraits;
-                    $totalA_Debiter = $request->amount + $fees;
-
-                    if ($totalA_Debiter > $soldeDispo) {
-                        throw new \Exception('Solde insuffisant (' . number_format($soldeDispo, 0, ',', ' ') . ' XAF disponible, frais inclus).');
+                    if ($totalADebiter > $soldeDisponible) {
+                        $nomCible = $subAccount ? 'le sous-compte (' . $subAccount->name . ')' : 'le compte principal';
+                        throw new \Exception('Solde insuffisant sur ' . $nomCible . ' (' . number_format($soldeDisponible, 0, ',', ' ') . ' XAF disponible, frais inclus).');
                     }
                 }
 
+                // Mise à jour des soldes (Compte Principal vs Sous-Compte)
+                if ($subAccount) {
+                    if ($request->type === 'deposit') {
+                        $subAccount->increment('balance', $request->amount);
+                    } else {
+                        $subAccount->decrement('balance', $totalADebiter);
+                    }
+                } else {
+                    if ($request->type === 'deposit') {
+                        $account->increment('balance', $request->amount);
+                    } else {
+                        $account->decrement('balance', $totalADebiter);
+                    }
+                }
+
+                // Enregistrement dans l'historique des transactions
                 $prefix = $request->type === 'deposit' ? 'DEP-' : 'RET-';
 
-                // Enregistrement de la transaction
                 DB::table('transactions')->insert([
-                    'account_id'   => $account->id,
-                    'performed_by' => $comptable->id,
-                    'type'         => $request->type,
-                    'amount'       => $request->amount,
-                    'fees'         => $fees,
-                    'reference'    => $prefix . strtoupper(uniqid()),
-                    'description'  => $typeLabel . ' Express au Guichet',
-                    'created_at'   => now(),
-                    'updated_at'   => now(),
+                    'account_id'     => $account->id,
+                    'sub_account_id' => $subAccount ? $subAccount->id : null, // Ne fonctionne que si la colonne existe en BD
+                    'performed_by'   => $comptable->id,
+                    'type'           => $request->type,
+                    'amount'         => $request->amount,
+                    'fees'           => $fees,
+                    'reference'      => $prefix . strtoupper(uniqid()),
+                    'description'    => $typeLabel . ' Express au Guichet ' . ($subAccount ? '(' . $subAccount->name . ')' : '(Compte principal)'),
+                    'created_at'     => now(),
+                    'updated_at'     => now(),
                 ]);
             });
 
             return redirect()->back()->with('success', $typeLabel . ' de ' . number_format($request->amount, 0, ',', ' ') . ' XAF effectué avec succès !');
 
         } catch (\Exception $e) {
-                return redirect()->back()->with('error', $e->getMessage());
-            }
+            return redirect()->back()->with('error', $e->getMessage());
+        }
     }
 
 
@@ -579,21 +634,20 @@ class ComptableDashboardController extends Controller
         $search = $request->get('search');
         $accountType = $request->get('account_type');
 
-        // Récupération des zones pour le formulaire d'ajout
         $zones = Zone::where('structure_id', $agencyId)->get();
 
-        // Requête principale sur les clients de l'agence
+        // 🟢 CORRECTION : Eager-loading imbriqué pour charger accounts ET subAccounts
         $query = User::where('structure_id', $agencyId)
             ->whereHas('roles', function ($q) {
                 $q->where('name', 'Client');
             })
-            ->with(['zone', 'accounts']);
+            ->with(['zone', 'accounts.subAccounts']);
 
         if ($search) {
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'LIKE', "%{$search}%")
-                  ->orWhere('phone', 'LIKE', "%{$search}%")
-                  ->orWhere('email', 'LIKE', "%{$search}%");
+                ->orWhere('phone', 'LIKE', "%{$search}%")
+                ->orWhere('email', 'LIKE', "%{$search}%");
             });
         }
 
@@ -605,7 +659,18 @@ class ComptableDashboardController extends Controller
 
         $clients = $query->orderBy('created_at', 'desc')->paginate(15);
 
-        // Types de Tontines disponibles
+        // Formater la liste des sous-comptes à plat pour chaque client (AlpineJS / Modales)
+        $clients->getCollection()->transform(function ($client) {
+            $subAccountsList = collect();
+            foreach ($client->accounts as $acc) {
+                if ($acc->relationLoaded('subAccounts')) {
+                    $subAccountsList = $subAccountsList->merge($acc->subAccounts);
+                }
+            }
+            $client->sub_accounts = $subAccountsList;
+            return $client;
+        });
+
         $tontineTypes = [
             'simple'         => 'Tontine Simple',
             'scolaire'       => 'Tontine Scolaire',
@@ -619,10 +684,20 @@ class ComptableDashboardController extends Controller
 
         // Stats Globales
         $totalClientsActifs = User::where('structure_id', $agencyId)->where('status', 'active')->count();
-        $totalEpargneGlobal = DB::table('accounts')
+
+        // 🟢 Calcul de l'épargne globale (Comptes principaux + Sous-comptes)
+        $epargneMain = DB::table('accounts')
             ->join('users', 'accounts.user_id', '=', 'users.id')
             ->where('users.structure_id', $agencyId)
             ->sum('accounts.balance');
+
+        $epargneSub = DB::table('sub_accounts')
+            ->join('accounts', 'sub_accounts.account_id', '=', 'accounts.id')
+            ->join('users', 'accounts.user_id', '=', 'users.id')
+            ->where('users.structure_id', $agencyId)
+            ->sum('sub_accounts.balance');
+
+        $totalEpargneGlobal = $epargneMain + $epargneSub;
 
         return view('comptabilite.clients.index', compact(
             'clients',
@@ -687,6 +762,18 @@ class ComptableDashboardController extends Controller
                     'status'         => 'active',
                     'created_at'     => now(),
                     'updated_at'     => now(),
+                ]);
+
+                // 🟢 AJOUT : Création automatique du sous-compte associé
+                SubAccount::create([
+                    'account_id'      => $account->id, // Laison au compte principal
+                    'tontine_plan_id' => $request->tontine_plan_ids[$tontineType] ?? null, // Si un plan est transmis
+                    'name'            => 'Sous-compte ' . ucfirst($tontineType),
+                    'code'            => 'SUB-' . strtoupper(Str::random(5)),
+                    'balance'         => $depositAmount,
+                    'target_amount'   => 0, // Ou montant visé selon le besoin
+                    'color'           => '#4F46E5',
+                    'status'          => 'active',
                 ]);
 
                 // Transaction Dépôt Initial
@@ -806,45 +893,61 @@ class ComptableDashboardController extends Controller
      */
     public function addTontine(Request $request, $clientId)
     {
+        // 1. Corriger les clés de validation pour correspondre à name="tontine_plan_id"
         $request->validate([
-            'type'            => 'required|in:simple,scolaire,investissement,fin_annee,assurance,islamique,marchande,electromenager',
+            'tontine_plan_id' => 'required', // Ajoutez la règle adaptée (ex: exists:tontine_plans,id ou String)
             'initial_deposit' => 'required|numeric|min:1000',
         ], [
             'initial_deposit.min' => 'Le versement initial doit être d\'au moins 1 000 XAF.',
+            'tontine_plan_id.required' => 'Veuillez sélectionner un plan de tontine.',
         ]);
 
         $client = User::findOrFail($clientId);
         $comptable = Auth::user();
 
-        // Vérifier si le client possède déjà ce type de tontine
-        $exists = DB::table('accounts')->where('user_id', $client->id)->where('type', $request->type)->exists();
+        // 2. Récupérer le compte principal du client
+        $account = Account::where('user_id', $client->id)->first();
+
+        if (!$account) {
+            return redirect()->back()->with('error', 'Le client ne possède aucun compte principal actif.');
+        }
+
+        // 3. Vérifier si le client possède déjà cette tontine
+        $exists = DB::table('sub_accounts')
+            ->where('account_id', $account->id)
+            ->where('tontine_plan_id', $request->tontine_plan_id)
+            ->exists();
+
         if ($exists) {
-            return redirect()->back()->with('error', 'Le client possède déjà une tontine de type ' . ucfirst($request->type));
+            return redirect()->back()->with('error', 'Le client possède déjà ce type de tontine.');
         }
 
         DB::beginTransaction();
         try {
-            $accountId = DB::table('accounts')->insertGetId([
-                'user_id'        => $client->id,
-                'account_number' => 'ACC-' . strtoupper(Str::random(3)) . '-' . rand(10000, 99999),
-                'type'           => $request->type,
-                'balance'        => $request->initial_deposit,
-                'reserve_fund'   => 1000.00,
-                'status'         => 'active',
-                'created_at'     => now(),
-                'updated_at'     => now(),
+            // 4. Créer le sous-compte dans 'sub_accounts'
+            $subAccountId = DB::table('sub_accounts')->insertGetId([
+                'account_id'         => $account->id,
+                'code'               => 'SUB-' . strtoupper(Str::random(3)) . '-' . rand(100, 999),
+                'name'               => ucfirst($request->tontine_plan_id),
+                'tontine_plan_id'    => $request->tontine_plan_id,
+                'balance'            => $request->initial_deposit,
+                'status'             => 'active',
+                'created_at'         => now(),
+                'updated_at'         => now(),
             ]);
 
+            // 5. Enregistrer la transaction
             DB::table('transactions')->insert([
-                'account_id'   => $accountId,
-                'performed_by' => $comptable->id,
-                'type'         => 'deposit',
-                'amount'       => $request->initial_deposit,
-                'fees'         => 0.00,
-                'reference'    => 'DEP-NEW-' . strtoupper(Str::random(8)),
-                'description'  => 'Ouverture nouvelle tontine : ' . ucfirst($request->type),
-                'created_at'   => now(),
-                'updated_at'   => now(),
+                'account_id'     => $account->id,
+                'sub_account_id' => $subAccountId,
+                'performed_by'   => $comptable->id,
+                'type'           => 'deposit',
+                'amount'         => $request->initial_deposit,
+                'fees'           => 0.00,
+                'reference'      => 'DEP-NEW-' . strtoupper(Str::random(8)),
+                'description'    => 'Ouverture nouvelle tontine : ' . ucfirst($request->tontine_plan_id),
+                'created_at'     => now(),
+                'updated_at'     => now(),
             ]);
 
             DB::commit();
@@ -887,9 +990,62 @@ class ComptableDashboardController extends Controller
         return redirect()->back()->with('success', $msg);
     }
 
-    public function boutique()
+    public function stockVente(Request $request)
     {
-        return view('comptabilite.boutique.index');
+        $user = Auth::user();
+        $agencyColumn = Schema::hasColumn('users', 'structure_id') ? 'structure_id' : 'agency_id';
+        $agencyId = $user->{$agencyColumn};
+
+        // 1. Statistiques Globales des Stocks
+        $articlesQuery = Product::where('agency_id', $agencyId);
+
+        $totalStockItems = (clone $articlesQuery)->sum('stock');
+
+        // Valorisation du stock (Prix d'achat vs Prix Vente)
+        $stockValueCost = (clone $articlesQuery)->get()->sum(fn($a) => $a->stock * ($a->purchase_price ?? 0));
+        $stockValueSelling = (clone $articlesQuery)->get()->sum(fn($a) => $a->stock * $a->cash_price);
+
+        // 2. Statistiques des Commandes / Contrats Articles
+        $ordersQuery = Order::where('agency_id', $agencyId);
+
+        $totalSalesCash = (clone $ordersQuery)->where('payment_type', 'cash')->sum('total_amount');
+        $totalSalesInstallment = (clone $ordersQuery)->where('payment_type', 'installment')->sum('total_amount');
+        $totalCollectedInstallments = (clone $ordersQuery)->where('payment_type', 'installment')->sum('paid_amount');
+
+        // 3. Filtrage de la liste des articles
+        $articles = (clone $articlesQuery)
+            ->when($request->filled('search'), function ($q) use ($request) {
+                $q->where('name', 'like', "%{$request->search}%")
+                  ->orWhere('code', 'like', "%{$request->search}%");
+            })
+            ->when($request->filled('stock_status'), function ($q) use ($request) {
+                if ($request->stock_status === 'low') {
+                    $q->whereColumn('stock', '<=', 'min_stock_threshold');
+                } elseif ($request->stock_status === 'out') {
+                    $q->where('stock', '<=', 0);
+                }
+            })
+            ->latest()
+            ->paginate(15, ['*'], 'articles_page')
+            ->withQueryString();
+
+        // 4. Dernières Ventes & Contrats pour Audit
+        $recentOrders = (clone $ordersQuery)
+            ->with(['user', 'article'])
+            ->latest()
+            ->take(10)
+            ->get();
+
+        return view('comptabilite.boutique.index', compact(
+            'articles',
+            'recentOrders',
+            'totalStockItems',
+            'stockValueCost',
+            'stockValueSelling',
+            'totalSalesCash',
+            'totalSalesInstallment',
+            'totalCollectedInstallments'
+        ));
     }
 
     public function echeanciers()

@@ -221,11 +221,13 @@
                 <button @click="openAddTontineModal = false" class="text-slate-400 hover:text-white"><i class="bi bi-x-lg"></i></button>
             </div>
 
+
+
             <form action="{{ route('comptabilite.clients.add-tontine', $client->id) }}" method="POST" class="space-y-4">
                 @csrf
                 <div>
                     <label class="block mb-1 text-[11px] font-semibold text-slate-300">Type de Tontine *</label>
-                    <select name="type" required class="w-full px-3 py-2 text-xs text-white border bg-slate-950 border-slate-800 rounded-xl">
+                    <select name="tontine_plan_id" required class="w-full px-3 py-2 text-xs text-white border bg-slate-950 border-slate-800 rounded-xl">
                         @foreach($tontineTypes as $key => $label)
                             <option value="{{ $key }}">{{ $label }}</option>
                         @endforeach

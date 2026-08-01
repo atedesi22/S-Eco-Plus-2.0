@@ -9,8 +9,9 @@ use App\Models\Objective;
 use App\Models\Product;
 use App\Models\Sanction;
 use App\Models\Structure;
+use App\Models\SubAccount;
 use App\Models\Transaction;
-// use App\Models\User;
+use App\Models\User;
 use App\Models\Zone;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -18,6 +19,7 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -72,6 +74,12 @@ class User extends Authenticatable
     public function accounts()
     {
         return $this->hasMany(Account::class);
+    }
+
+    public function subAccounts()
+    {
+        // Récupère les sous-comptes au travers de la table accounts
+        return $this->hasManyThrough(SubAccount::class, Account::class);
     }
 
     /**
@@ -182,6 +190,18 @@ class User extends Authenticatable
     public function collector()
     {
         return $this->belongsTo(User::class, 'collector_id');
+    }
+
+    public function tontines(): HasManyThrough
+    {
+        return $this->hasManyThrough(
+            SubAccount::class, // Modèle final
+            Account::class,    // Modèle intermédiaire
+            'user_id',         // Clé étrangère dans la table accounts
+            'account_id',      // Clé étrangère dans la table sub_accounts
+            'id',              // Clé locale dans la table users
+            'id'               // Clé locale dans la table accounts
+        );
     }
 
     /**

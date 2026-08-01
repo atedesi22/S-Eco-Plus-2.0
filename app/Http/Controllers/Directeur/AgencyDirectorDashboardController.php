@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Directeur;
 use App\Http\Controllers\Controller;
 use App\Models\Account;
 use App\Models\Caisse;
+use App\Models\CashTransaction;
 use App\Models\Objective;
 use App\Models\Order;
+use App\Models\OrderPayment;
 use App\Models\Product;
 use App\Models\User;
 use App\Models\Zone;
@@ -778,6 +780,136 @@ class AgencyDirectorDashboardController extends Controller
         // Notification::send($order->collector, new DirectAgentReminderNotification($order, $request->note));
 
         return redirect()->back()->with('success', 'Rappel direct transmis avec succès au collecteur ' . ($order->collector->name ?? 'référent') . '.');
+    }
+
+    public function repportIndex(Request $request)
+    {
+        $user = Auth::user();
+        $agencyColumn = Schema::hasColumn('users', 'structure_id') ? 'structure_id' : 'agency_id';
+        $agencyId = $user->{$agencyColumn};
+
+        // Date sélectionnée (par défaut aujourd'hui)
+        $selectedDate = $request->input('date') ? Carbon::parse($request->input('date')) : Carbon::today();
+
+        // 1. Encaissements de la journée via les tranches de commande/épargne
+        $paymentsToday = OrderPayment::whereDate('created_at', $selectedDate)
+            ->whereHas('collector', function ($q) use ($agencyColumn, $agencyId) {
+                $q->where($agencyColumn, $agencyId);
+            })
+            ->with(['order.client', 'collector'])
+            ->get();
+
+        $totalFieldCollected = $paymentsToday->sum('amount');
+
+        // 2. Ventes cash boutique conclues la journée
+        $cashSalesToday = Order::whereDate('created_at', $selectedDate)
+            ->where('payment_type', 'cash')
+            ->whereHas('client', function ($q) use ($agencyColumn, $agencyId) {
+                $q->where($agencyColumn, $agencyId);
+            })
+            ->get();
+
+        $totalCashSales = $cashSalesToday->sum('total_amount');
+        $grandTotalCollected = $totalFieldCollected + $totalCashSales;
+
+        // 3. Nouveaux clients enregistrés la journée
+        $newClientsCount = User::role('Client')
+            ->where($agencyColumn, $agencyId)
+            ->whereDate('created_at', $selectedDate)
+            ->count();
+
+        // 4. Livraisons effectuées / approuvées la journée (seuil 60% validé)
+        $deliveriesCount = Order::whereDate('delivered_at', $selectedDate)
+            ->whereHas('client', function ($q) use ($agencyColumn, $agencyId) {
+                $q->where($agencyColumn, $agencyId);
+            })
+            ->count();
+
+        // 5. Performance par collecteur pour la journée
+        $collectorsPerformance = User::role(['Collectrice', 'Commercial'])
+            ->where($agencyColumn, $agencyId)
+            ->get()
+            ->map(function ($collector) use ($selectedDate) {
+                $amount = OrderPayment::where('collected_by', $collector->id)
+                    ->whereDate('created_at', $selectedDate)
+                    ->sum('amount');
+                $count = OrderPayment::where('collected_by', $collector->id)
+                    ->whereDate('created_at', $selectedDate)
+                    ->count();
+
+                return [
+                    'collector' => $collector,
+                    'total_amount' => $amount,
+                    'transactions_count' => $count,
+                ];
+            })
+            ->sortByDesc('total_amount');
+
+        return view('directeur.rapports.index', compact(
+            'selectedDate',
+            'paymentsToday',
+            'totalFieldCollected',
+            'totalCashSales',
+            'grandTotalCollected',
+            'newClientsCount',
+            'deliveriesCount',
+            'collectorsPerformance'
+        ));
+    }
+
+
+    public function fluxIndex(Request $request)
+    {
+        $user = Auth::user();
+        $agencyColumn = Schema::hasColumn('users', 'structure_id') ? 'structure_id' : 'agency_id';
+        $agencyId = $user->{$agencyColumn};
+
+        $query = CashTransaction::where('agency_id', $agencyId)
+            ->with(['user', 'operator'])
+            ->latest();
+
+        // Filtre par type (Crédit / Débit)
+        if ($request->filled('type')) {
+            $query->where('type', $request->type);
+        }
+
+        // Filtre par catégorie de flux
+        if ($request->filled('category')) {
+            $query->where('category', $request->category);
+        }
+
+        // Filtre par plage de dates
+        if ($request->filled('date_from')) {
+            $query->whereDate('created_at', '>=', $request->date_from);
+        }
+        if ($request->filled('date_to')) {
+            $query->whereDate('created_at', '<=', $request->date_to);
+        }
+
+        // Filtre par recherche textuelle (Numéro transaction, nom client/opérateur)
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('transaction_number', 'like', "%{$search}%")
+                  ->orWhere('description', 'like', "%{$search}%")
+                  ->orWhereHas('user', fn($u) => $u->where('name', 'like', "%{$search}%"))
+                  ->orWhereHas('operator', fn($o) => $o->where('name', 'like', "%{$search}%"));
+            });
+        }
+
+        // Statistiques globales de la période filtrée
+        $totalCredits = (clone $query)->where('type', 'credit')->sum('amount');
+        $totalDebits  = (clone $query)->where('type', 'debit')->sum('amount');
+        $netCashFlow  = $totalCredits - $totalDebits;
+
+        $transactions = $query->paginate(20)->withQueryString();
+
+        return view('directeur.flux.index', compact(
+            'transactions',
+            'totalCredits',
+            'totalDebits',
+            'netCashFlow'
+        ));
     }
 
 

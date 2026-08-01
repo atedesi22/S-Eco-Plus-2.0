@@ -4,16 +4,16 @@
 
 @section('content')
 
-    <!-- En-tête Agence -->
-    <div class="flex items-center justify-between pb-4 border-b border-slate-800">
-        <div>
-            <h2 class="text-xl font-bold text-white">Espace Comptabilité & Trésorerie</h2>
-            <p class="text-xs text-slate-400">Agence : <span class="font-semibold text-emerald-400">{{ $agency->name ?? 'N/A' }}</span></p>
+        <!-- En-tête Agence -->
+        <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+            <div>
+                <h2 class="text-xl font-bold text-white">Espace Comptabilité & Trésorerie</h2>
+                <p class="text-xs text-slate-400">Agence : <span class="font-semibold text-emerald-400">{{ $agency->name ?? 'N/A' }}</span></p>
+            </div>
+            <span class="px-3 py-1 font-mono text-xs font-semibold border rounded-full bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                Session Active
+            </span>
         </div>
-        <span class="px-3 py-1 font-mono text-xs font-semibold border rounded-full bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
-            Session Active
-        </span>
-    </div>
 
         <!-- Indicateurs Financiers -->
         <div class="grid grid-cols-1 gap-6 mt-6 md:grid-cols-3">
@@ -63,134 +63,15 @@
         <!-- Section Guichet de Test & Opérations Récentes -->
         <div class="grid grid-cols-1 gap-6 mt-6 lg:grid-cols-3">
 
-                <!-- Formulaire Guichet - Retrait Express -->
-            {{-- <div class="p-6 border bg-slate-900 border-slate-800 rounded-2xl lg:col-span-1"
-                x-data="retraitGuichet()">
-
-                <h5 class="flex items-center mb-4 space-x-2 text-sm font-bold text-white">
-                    <i class="bi bi-cash-stack text-emerald-400"></i>
-                    <span>Guichet - Retrait Express</span>
-                </h5>
-
-                <!-- Messages Flash de Succès ou d'Erreur -->
-                @if(session('success'))
-                    <div class="p-3 mb-4 text-xs font-semibold border rounded-xl bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
-                        {{ session('success') }}
-                    </div>
-                @endif
-
-                @if(session('error'))
-                    <div class="p-3 mb-4 text-xs font-semibold border rounded-xl bg-rose-500/10 text-rose-400 border-rose-500/20">
-                        {{ session('error') }}
-                    </div>
-                @endif
-
-                <form action="{{ route('comptabilite.retraits.store') }}" method="POST" class="space-y-4">
-                    @csrf
-
-                    <!-- Champ Caché pour envoyer l'ID du client sélectionné -->
-                    <input type="hidden" name="user_id" :value="selectedClient ? selectedClient.id : ''">
-
-                    <!-- Autocomplétion / Recherche Client -->
-                    <div class="relative" @click.away="open = false">
-                        <label class="block mb-2 text-xs font-medium text-slate-400">Rechercher un Client</label>
-
-                        <div class="relative">
-                            <input
-                                type="text"
-                                x-model="search"
-                                @focus="open = true"
-                                @input="filterClients()"
-                                placeholder="Nom, téléphone ou code client..."
-                                class="w-full pl-10 pr-4 py-2.5 text-sm text-white border bg-slate-950 border-slate-800 rounded-xl focus:outline-none focus:border-emerald-500"
-                                required
-                            >
-                            <i class="bi bi-search absolute left-3.5 top-3 text-slate-500 text-sm"></i>
-                        </div>
-
-                        <!-- Liste Doulante des Résultats de Recherche -->
-                        <div x-show="open && filteredClients.length > 0"
-                            x-cloak
-                            class="absolute left-0 right-0 z-50 p-1 mt-1 space-y-1 overflow-y-auto border shadow-xl max-h-56 bg-slate-950 border-slate-800 rounded-xl">
-                            <template x-for="client in filteredClients" :key="client.id">
-                                <button
-                                    type="button"
-                                    @click="selectClient(client)"
-                                    class="flex items-center justify-between w-full px-3 py-2 text-xs text-left transition rounded-lg hover:bg-slate-800 group"
-                                >
-                                    <div>
-                                        <p class="font-bold text-slate-200 group-hover:text-emerald-400" x-text="client.name"></p>
-                                        <span class="text-[10px] text-slate-500" x-text="client.phone"></span>
-                                    </div>
-                                    <div class="text-right">
-                                        <span class="text-[10px] uppercase font-mono text-slate-400 block" x-text="client.code ?? 'CLIENT'"></span>
-                                        <span class="font-bold text-emerald-400" x-text="formatMoney(client.balance) + ' XAF'"></span>
-                                    </div>
-                                </button>
-                            </template>
-                        </div>
-
-                        <!-- Aucun résultat trouvé -->
-                        <div x-show="open && search.length > 1 && filteredClients.length === 0"
-                            x-cloak
-                            class="absolute left-0 right-0 z-50 p-3 mt-1 text-xs text-center border bg-slate-950 border-slate-800 rounded-xl text-slate-500">
-                            Aucun client trouvé pour "<span x-text="search"></span>"
-                        </div>
-                    </div>
-
-                    <!-- Badges d'information sur le client sélectionné -->
-                    <template x-if="selectedClient">
-                        <div class="flex items-center justify-between p-3 border bg-emerald-500/10 border-emerald-500/20 rounded-xl">
-                            <div>
-                                <span class="text-[10px] uppercase tracking-wider text-emerald-400 font-bold block">Solde Disponible</span>
-                                <span class="text-base font-bold text-white" x-text="formatMoney(selectedClient.balance) + ' XAF'"></span>
-                            </div>
-                            <button type="button" @click="clearSelection()" class="text-xs text-slate-400 hover:text-rose-400">
-                                <i class="text-base bi bi-x-circle"></i>
-                            </button>
-                        </div>
-                    </template>
-
-                    <!-- Montant du Retrait -->
-                    <div>
-                        <label class="block mb-2 text-xs font-medium text-slate-400">Montant du Retrait (XAF)</label>
-                        <input
-                            type="number"
-                            name="amount"
-                            x-model="amount"
-                            placeholder="Ex: 10000"
-                            min="100"
-                            :max="selectedClient ? selectedClient.balance : ''"
-                            class="w-full px-4 py-2.5 text-sm text-white border bg-slate-950 border-slate-800 rounded-xl focus:outline-none focus:border-emerald-500"
-                            required
-                        >
-                        <template x-if="selectedClient && amount > selectedClient.balance">
-                            <span class="text-[11px] text-rose-400 mt-1 block">Attention: Le montant dépasse le solde disponible !</span>
-                        </template>
-                    </div>
-
-                    <!-- Bouton Soumission -->
-                    <button
-                        type="submit"
-                        :disabled="!selectedClient || amount <= 0 || amount > selectedClient.balance"
-                        class="w-full px-4 py-3 text-xs font-bold transition bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 rounded-xl"
-                    >
-                        Valider le Retrait au Guichet
-                    </button>
-                </form>
-            </div> --}}
-
             <!-- Formulaire Guichet - Retrait Express -->
             <!-- Widget Guichet - Dépôt & Retrait Express -->
-            <div class="p-6 border bg-slate-900 border-slate-800 rounded-2xl lg:col-span-1"
-                x-data="guichetExpress()">
+            <div class="p-6 border bg-slate-900 border-slate-800 rounded-2xl lg:col-span-1" x-data="guichetExpress()">
 
                 <h5 class="flex items-center mb-4 space-x-2 text-sm font-bold text-white">
                     <i class="bi bi-bank text-emerald-400"></i>
                     <span>Guichet - Opération Express</span>
                 </h5>
 
-                <!-- Alertes -->
                 @if(session('success'))
                     <div class="p-3 mb-4 text-xs font-semibold border rounded-xl bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
                         {{ session('success') }}
@@ -206,7 +87,6 @@
                 <form action="{{ route('comptabilite.transactions.store') }}" method="POST" class="space-y-4">
                     @csrf
 
-                    <!-- Choix de l'opération : Dépôt ou Retrait -->
                     <div class="grid grid-cols-2 gap-2 p-1 border bg-slate-950 border-slate-800 rounded-xl">
                         <button
                             type="button"
@@ -229,11 +109,9 @@
                         </button>
                     </div>
 
-                    <!-- Input caché envoyé au serveur -->
                     <input type="hidden" name="type" :value="type">
                     <input type="hidden" name="user_id" :value="selectedClient ? selectedClient.id : ''" required>
 
-                    <!-- Liste déroulante dynamique triée (A-Z) avec filtre -->
                     <div class="relative" @click.away="open = false">
                         <label class="block mb-2 text-xs font-medium text-slate-400">Sélectionner un Client</label>
 
@@ -247,7 +125,6 @@
                             <i class="text-xs transition-transform duration-200 bi bi-chevron-down text-slate-400" :class="open ? 'rotate-180' : ''"></i>
                         </button>
 
-                        <!-- Dropdown Menu -->
                         <div x-show="open"
                             x-transition
                             class="absolute left-0 right-0 z-50 p-2 mt-2 overflow-hidden border shadow-2xl bg-slate-950 border-slate-800 rounded-xl">
@@ -277,7 +154,7 @@
                                             <span class="text-[10px] text-slate-500" x-text="client.phone || 'Pas de numéro'"></span>
                                         </div>
                                         <div class="text-right">
-                                            <span class="font-bold text-emerald-400" x-text="formatMoney(client.balance) + ' XAF'"></span>
+                                            <span class="font-bold text-emerald-400" x-text="formatMoney(client.total_balance) + ' XAF'"></span>
                                         </div>
                                     </button>
                                 </template>
@@ -289,20 +166,46 @@
                         </div>
                     </div>
 
-                    <!-- Informations Solde -->
                     <template x-if="selectedClient">
-                        <div class="flex items-center justify-between p-3 border bg-slate-950 border-slate-800 rounded-xl">
-                            <div>
-                                <span class="text-[10px] uppercase tracking-wider text-slate-400 font-bold block">Solde Actuel</span>
-                                <span class="text-base font-bold text-emerald-400" x-text="formatMoney(selectedClient.balance) + ' XAF'"></span>
+                        <div class="p-3.5 space-y-3 border bg-slate-950/80 border-slate-800 rounded-xl">
+
+                            <div class="flex items-center justify-between pb-2.5 border-b border-slate-800">
+                                <div>
+                                    <span class="text-[10px] uppercase tracking-wider text-slate-400 font-bold block">Solde Total Cumulé</span>
+                                    <span class="text-xl font-extrabold text-emerald-400" x-text="formatMoney(selectedClient.total_balance) + ' XAF'"></span>
+                                </div>
+                                <button type="button" @click="clearSelection()" class="text-xs transition text-slate-400 hover:text-rose-400">
+                                    <i class="text-lg bi bi-x-circle-fill"></i>
+                                </button>
                             </div>
-                            <button type="button" @click="clearSelection()" class="text-xs transition text-slate-400 hover:text-rose-400">
-                                <i class="text-base bi bi-x-circle"></i>
-                            </button>
+
+                            <div class="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 flex items-center justify-between">
+                                <div class="space-y-0.5">
+                                    <span class="text-[9px] uppercase tracking-wider text-slate-400 font-semibold block">Tontine de Départ</span>
+                                    <p class="text-xs font-bold text-slate-200" x-text="selectedClient.main_account_name"></p>
+                                </div>
+                                <span class="text-xs font-bold text-amber-400" x-text="formatMoney(selectedClient.main_balance) + ' XAF'"></span>
+                            </div>
+
+                            <div>
+                                <label class="block mb-1 text-[10px] uppercase tracking-wider text-slate-400 font-bold">
+                                    Sous-Comptes / Autres Tontines (<span x-text="selectedClient.sub_accounts ? selectedClient.sub_accounts.length : 0"></span>)
+                                </label>
+
+                                <select name="sub_account_id"
+                                        x-model="selectedSubAccountId"
+                                        class="w-full px-3 py-2 text-xs border rounded-lg text-slate-200 bg-slate-900 border-slate-800 focus:outline-none focus:border-emerald-500">
+                                    <option value="">-- Compte Principal (Par défaut) --</option>
+                                    <template x-for="sub in selectedClient.sub_accounts" :key="sub.id">
+                                        <option x-bind:value="sub.id"
+                                                x-text="sub.name + ' — (' + formatMoney(sub.balance) + ' XAF)'">
+                                        </option>
+                                    </template>
+                                </select>
+                            </div>
                         </div>
                     </template>
 
-                    <!-- Montant -->
                     <div>
                         <label class="block mb-2 text-xs font-medium text-slate-400">Montant de l'opération (XAF)</label>
                         <input
@@ -311,21 +214,19 @@
                             x-model="amount"
                             placeholder="Ex: 10000"
                             min="100"
-                            :max="type === 'withdrawal' && selectedClient ? selectedClient.balance : ''"
+                            :max="type === 'withdrawal' && selectedClient ? selectedClient.total_balance : ''"
                             class="w-full px-4 py-2.5 text-sm text-white border bg-slate-950 border-slate-800 rounded-xl focus:outline-none focus:border-emerald-500"
                             required
                         >
 
-                        <!-- Message d'erreur dynamique uniquement lors d'un retrait dépassé -->
-                        <template x-if="type === 'withdrawal' && selectedClient && Number(amount) > Number(selectedClient.balance)">
-                            <span class="text-[11px] text-rose-400 mt-1 block font-medium">⚠️ Le montant dépasse le solde disponible !</span>
+                        <template x-if="type === 'withdrawal' && selectedClient && Number(amount) > Number(selectedClient.total_balance)">
+                            <span class="text-[11px] text-rose-400 mt-1 block font-medium">⚠️ Le montant dépasse le solde total disponible !</span>
                         </template>
                     </div>
 
-                    <!-- Bouton Soumettre dynamique -->
                     <button
                         type="submit"
-                        :disabled="!selectedClient || amount <= 0 || (type === 'withdrawal' && Number(amount) > Number(selectedClient.balance))"
+                        :disabled="!selectedClient || amount <= 0 || (type === 'withdrawal' && Number(amount) > Number(selectedClient.total_balance))"
                         :class="type === 'deposit' ? 'bg-emerald-500 hover:bg-emerald-600 text-slate-950' : 'bg-rose-500 hover:bg-rose-600 text-white'"
                         class="w-full px-4 py-3 text-xs font-bold transition disabled:opacity-50 disabled:cursor-not-allowed rounded-xl"
                     >
@@ -337,17 +238,18 @@
             <script>
                 function guichetExpress() {
                     return {
-                        type: 'deposit', // Option par défaut : 'deposit' ou 'withdrawal'
+                        type: 'deposit',
                         open: false,
                         search: '',
                         selectedClient: null,
+                        selectedSubAccountId: '', // 🟢 Correctement déclaré ici
                         amount: '',
                         rawClients: @json($clientsAgence ?? []),
                         clients: [],
                         filteredClients: [],
 
                         init() {
-                            // Tri alphabétique des clients A-Z
+                            // Tri alphabétique A-Z
                             this.clients = (this.rawClients || []).sort((a, b) => {
                                 return (a.name || '').localeCompare(b.name || '', 'fr', { sensitivity: 'base' });
                             });
@@ -378,16 +280,14 @@
 
                         selectClient(client) {
                             this.selectedClient = client;
+                            this.selectedSubAccountId = ''; // Réinitialiser le sous-compte
                             this.open = false;
-                            this.search = '';
-                            this.filteredClients = this.clients;
                         },
 
                         clearSelection() {
                             this.selectedClient = null;
+                            this.selectedSubAccountId = '';
                             this.amount = '';
-                            this.search = '';
-                            this.filteredClients = this.clients;
                         },
 
                         formatMoney(val) {
@@ -443,53 +343,5 @@
             </div>
 
         </div>
-
-    <!-- Script Alpine.js de gestion de la recherche -->
-    {{-- <script>
-        function retraitGuichet() {
-            return {
-                search: '',
-                open: false,
-                selectedClient: null,
-                amount: '',
-                // Injection de la liste des clients de l'agence depuis Laravel
-                clients: @json($clientsAgence ?? []),
-                filteredClients: [],
-
-                init() {
-                    this.filteredClients = this.clients;
-                },
-
-                filterClients() {
-                    if (this.search.trim() === '') {
-                        this.filteredClients = this.clients;
-                        return;
-                    }
-                    const query = this.search.toLowerCase();
-                    this.filteredClients = this.clients.filter(client => {
-                        return client.name.toLowerCase().includes(query) ||
-                            (client.phone && client.phone.toLowerCase().includes(query)) ||
-                            (client.code && client.code.toLowerCase().includes(query));
-                    });
-                },
-
-                selectClient(client) {
-                    this.selectedClient = client;
-                    this.search = client.name;
-                    this.open = false;
-                },
-
-                clearSelection() {
-                    this.selectedClient = null;
-                    this.search = '';
-                    this.amount = '';
-                },
-
-                formatMoney(val) {
-                    return new Intl.NumberFormat('fr-FR').format(val || 0);
-                }
-            }
-        }
-    </script> --}}
 
 @endsection

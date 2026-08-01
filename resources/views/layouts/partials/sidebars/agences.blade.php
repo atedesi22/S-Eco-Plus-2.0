@@ -30,7 +30,8 @@
             <!-- 2. SUPERVISION & OPÉRATIONS -->
             <div class="pt-4 pb-1 px-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">Supervision Agence</div>
 
-            <a href="{{ route('directeur.validations.index') }}"
+            {{-- <a href="{{ route('directeur.validations.index') }}" --}}
+            <a href="#"
                class="flex items-center justify-between px-4 py-2 text-sm transition rounded-xl {{ request()->routeIs('directeur.validations.*') ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
                 <div class="flex items-center space-x-3">
                     <i class="bi bi-shield-check text-slate-500"></i>
@@ -38,7 +39,9 @@
                 </div>
             </a>
 
-            <a href="{{ route('directeur.caisses.index') }}" class="flex items-center px-4 py-2 space-x-3 text-sm transition rounded-xl {{ request()->routeIs('directeur.caisses.*') ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
+            {{-- <a href="{{ route('directeur.caisses.index') }}"  --}}
+            <a href="#"
+                class="flex items-center px-4 py-2 space-x-3 text-sm transition rounded-xl {{ request()->routeIs('directeur.caisses.*') ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
                 <i class="bi bi-safe2 text-slate-500"></i>
                 <span>Caisses & Coffres</span>
             </a>
@@ -88,14 +91,16 @@
             <!-- 5. RAPPORTS & AUDIT -->
             <div class="pt-4 pb-1 px-4 text-[10px] font-bold uppercase tracking-widest text-slate-500">Rapports & Activité</div>
 
+            {{-- <a href="{{ route('directeur.rapports.index') }}" --}}
             <a href="#"
-               class="flex items-center px-4 py-2 space-x-3 text-sm transition rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white">
+                class="flex items-center px-4 py-2 space-x-3 text-sm transition rounded-xl {{ request()->routeIs('directeur.rapports.*') ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
                 <i class="bi bi-graph-up-arrow text-slate-500"></i>
                 <span>Rapports Journaliers</span>
             </a>
 
+            {{-- <a href="{{ route('directeur.flux.index') }}" --}}
             <a href="#"
-               class="flex items-center px-4 py-2 space-x-3 text-sm transition rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white">
+                class="flex items-center px-4 py-2 space-x-3 text-sm transition rounded-xl {{ request()->routeIs('directeur.flux.*') ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
                 <i class="bi bi-clock-history text-slate-500"></i>
                 <span>Journal des Flux</span>
             </a>

@@ -38,7 +38,7 @@ class Account extends Model
     // Relation : Un compte principal a plusieurs sous-comptes / tontines
     public function subAccounts()
     {
-        return $this->hasMany(SubAccount::class); // Vérifie si ton modèle s'appelle bien SubAccount ou Tontine
+        return $this->hasMany(SubAccount::class, 'account_id');
     }
 
     // Relation : Un compte principal a plusieurs transactions
