@@ -8,6 +8,8 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\Structure;
 use App\Models\SubAccount;
+use App\Models\Tontine_plan;
+use App\Models\Transaction;
 use App\Models\User;
 use App\Models\Zone;
 use Illuminate\Http\Request;
@@ -630,47 +632,46 @@ class ComptableDashboardController extends Controller
     public function clients(Request $request)
     {
         $comptable = Auth::user();
-        $agencyId = $comptable->structure_id;
-        $search = $request->get('search');
-        $accountType = $request->get('account_type');
+        $agencyId = $comptable->agency_id;
 
-        $zones = Zone::where('structure_id', $agencyId)->get();
+        // 1. Charger les clients de l'agence avec leurs comptes et sous-comptes
+        $query = User::role('Client')
+            ->when($agencyId, fn($q) => $q->where('agency_id', $agencyId))
+            ->with(['accounts.subAccounts']);
 
-        // 🟢 CORRECTION : Eager-loading imbriqué pour charger accounts ET subAccounts
-        $query = User::where('structure_id', $agencyId)
-            ->whereHas('roles', function ($q) {
-                $q->where('name', 'Client');
-            })
-            ->with(['zone', 'accounts.subAccounts']);
-
-        if ($search) {
+        if ($request->filled('search')) {
+            $search = strtolower($request->search);
             $query->where(function ($q) use ($search) {
-                $q->where('name', 'LIKE', "%{$search}%")
-                ->orWhere('phone', 'LIKE', "%{$search}%")
-                ->orWhere('email', 'LIKE', "%{$search}%");
+                $q->whereRaw('LOWER(name) LIKE ?', ["%{$search}%"])
+                  ->orWhere('phone', 'LIKE', "%{$search}%")
+                  ->orWhere('email', 'LIKE', "%{$search}%");
             });
         }
 
-        if ($accountType) {
-            $query->whereHas('accounts', function ($q) use ($accountType) {
-                $q->where('type', $accountType);
+        $clients = $query->latest()->paginate(15);
+
+        // 2. Collection simplifiée des clients pour l'autocomplétion Alpine.js (Guichet Express)
+        $clientsAgence = User::role('Client')
+            ->when($agencyId, fn($q) => $q->where('agency_id', $agencyId))
+            ->with(['accounts.subAccounts'])
+            ->get()
+            ->map(function ($client) {
+                return [
+                    'id'          => $client->id,
+                    'name'        => $client->name,
+                    'phone'       => $client->phone ?? 'N/A',
+                    'account_id'  => $client->account->id ?? null,
+                    'sub_accounts' => $client->account ? $client->account->subAccounts->map(function ($sub) {
+                        return [
+                            'id'      => $sub->id,
+                            'name'    => $sub->name ?? ucfirst($sub->tontine_plan_id),
+                            'balance' => $sub->balance,
+                        ];
+                    }) : [],
+                ];
             });
-        }
 
-        $clients = $query->orderBy('created_at', 'desc')->paginate(15);
-
-        // Formater la liste des sous-comptes à plat pour chaque client (AlpineJS / Modales)
-        $clients->getCollection()->transform(function ($client) {
-            $subAccountsList = collect();
-            foreach ($client->accounts as $acc) {
-                if ($acc->relationLoaded('subAccounts')) {
-                    $subAccountsList = $subAccountsList->merge($acc->subAccounts);
-                }
-            }
-            $client->sub_accounts = $subAccountsList;
-            return $client;
-        });
-
+        // 3. Types de tontines disponibles
         $tontineTypes = [
             'simple'         => 'Tontine Simple',
             'scolaire'       => 'Tontine Scolaire',
@@ -682,32 +683,7 @@ class ComptableDashboardController extends Controller
             'electromenager' => 'Tontine Électroménager',
         ];
 
-        // Stats Globales
-        $totalClientsActifs = User::where('structure_id', $agencyId)->where('status', 'active')->count();
-
-        // 🟢 Calcul de l'épargne globale (Comptes principaux + Sous-comptes)
-        $epargneMain = DB::table('accounts')
-            ->join('users', 'accounts.user_id', '=', 'users.id')
-            ->where('users.structure_id', $agencyId)
-            ->sum('accounts.balance');
-
-        $epargneSub = DB::table('sub_accounts')
-            ->join('accounts', 'sub_accounts.account_id', '=', 'accounts.id')
-            ->join('users', 'accounts.user_id', '=', 'users.id')
-            ->where('users.structure_id', $agencyId)
-            ->sum('sub_accounts.balance');
-
-        $totalEpargneGlobal = $epargneMain + $epargneSub;
-
-        return view('comptabilite.clients.index', compact(
-            'clients',
-            'zones',
-            'tontineTypes',
-            'totalClientsActifs',
-            'totalEpargneGlobal',
-            'search',
-            'accountType'
-        ));
+        return view('comptabilite.clients.index', compact('clients', 'clientsAgence', 'tontineTypes'));
     }
 
     /**
@@ -805,87 +781,24 @@ class ComptableDashboardController extends Controller
      */
     public function showClient(Request $request, $id)
     {
-        $comptable = Auth::user();
 
-        // Récupération du client
-        $client = User::where('structure_id', $comptable->structure_id)
-            ->with(['zone', 'structure', 'accounts'])
-            ->findOrFail($id);
+        $client = User::with([
+            'accounts.subAccounts', // Relation sous-comptes
+            'zone.agents',      // Zone & collectrice attitrée
+            'collector',              // Agent créateur du compte
+            'collector'             // Collectrice directe si liée directement au client
+        ])->findOrFail($id);
 
-        // Collectrices affectées à la zone du client
-        $collectrices = User::where('zone_id', $client->zone_id)
-            ->whereHas('roles', function ($q) {
-                $q->whereIn('name', ['Collectrice', 'Commercial']);
-            })->get();
+        // Charger les transactions du client
+        $transactions = Transaction::whereIn('account_id', $client->accounts->pluck('id'))
+            ->with(['subAccount', 'operator'])
+            ->latest()
+            ->paginate(15);
 
-        // Agent créateur (déduit du premier dépôt de son premier compte)
-        $firstAccount = $client->accounts->first();
-        $creator = null;
-        if ($firstAccount) {
-            $firstTx = DB::table('transactions')
-                ->where('account_id', $firstAccount->id)
-                ->orderBy('created_at', 'asc')
-                ->first();
-            if ($firstTx) {
-                $creator = User::find($firstTx->performed_by);
-            }
-        }
+        $tontineTypes = Tontine_plan::pluck('name', 'id');
 
-        // Filtres Transactions
-        $startDate = $request->get('start_date');
-        $endDate = $request->get('end_date');
-        $txType = $request->get('tx_type');
+        return view('comptabilite.clients.show', compact('client', 'transactions', 'tontineTypes'));
 
-        $accountIds = $client->accounts->pluck('id');
-
-        $txQuery = DB::table('transactions')
-            ->join('accounts', 'transactions.account_id', '=', 'accounts.id')
-            ->join('users as agents', 'transactions.performed_by', '=', 'agents.id')
-            ->select('transactions.*', 'accounts.account_number', 'accounts.type as account_type', 'agents.name as agent_name')
-            ->whereIn('transactions.account_id', $accountIds);
-
-        if ($startDate) {
-            $txQuery->whereDate('transactions.created_at', '>=', $startDate);
-        }
-        if ($endDate) {
-            $txQuery->whereDate('transactions.created_at', '<=', $endDate);
-        }
-        if ($txType) {
-            $txQuery->where('transactions.type', $txType);
-        }
-
-        $transactions = $txQuery->orderBy('transactions.created_at', 'desc')->paginate(10);
-
-        // Achats Électroménager / Panier Boutique
-        $boutiqueTransactions = DB::table('transactions')
-            ->whereIn('account_id', $accountIds)
-            ->where('type', 'product_payment')
-            ->orderBy('created_at', 'desc')
-            ->get();
-
-        // Types de Tontines
-        $tontineTypes = [
-            'simple'         => 'Tontine Simple',
-            'scolaire'       => 'Tontine Scolaire',
-            'investissement' => 'Tontine Investissement',
-            'fin_annee'      => 'Tontine Fin d\'Année',
-            'assurance'      => 'Tontine Assurance',
-            'islamique'      => 'Tontine Islamique',
-            'marchande'      => 'Tontine Marchande',
-            'electromenager' => 'Tontine Électroménager',
-        ];
-
-        return view('comptabilite.clients.show', compact(
-            'client',
-            'collectrices',
-            'creator',
-            'transactions',
-            'boutiqueTransactions',
-            'tontineTypes',
-            'startDate',
-            'endDate',
-            'txType'
-        ));
     }
 
     /**
@@ -893,69 +806,143 @@ class ComptableDashboardController extends Controller
      */
     public function addTontine(Request $request, $clientId)
     {
-        // 1. Corriger les clés de validation pour correspondre à name="tontine_plan_id"
         $request->validate([
-            'tontine_plan_id' => 'required', // Ajoutez la règle adaptée (ex: exists:tontine_plans,id ou String)
+            'tontine_plan_id' => 'required|string',
             'initial_deposit' => 'required|numeric|min:1000',
         ], [
-            'initial_deposit.min' => 'Le versement initial doit être d\'au moins 1 000 XAF.',
-            'tontine_plan_id.required' => 'Veuillez sélectionner un plan de tontine.',
+            'initial_deposit.min'       => 'Le versement initial doit être d\'au moins 1 000 XAF.',
+            'tontine_plan_id.required' => 'Veuillez sélectionner un plan de tontine valide.',
         ]);
 
         $client = User::findOrFail($clientId);
         $comptable = Auth::user();
 
-        // 2. Récupérer le compte principal du client
-        $account = Account::where('user_id', $client->id)->first();
+        // Trouver ou créer le compte principal
+        $account = Account::firstOrCreate(
+            ['user_id' => $client->id],
+            [
+                'account_number' => 'ACC-' . strtoupper(Str::random(3)) . '-' . rand(10000, 99999),
+                'balance'        => 0,
+                'status'         => 'active',
+            ]
+        );
 
-        if (!$account) {
-            return redirect()->back()->with('error', 'Le client ne possède aucun compte principal actif.');
-        }
+        // Génération d'un code unique pour le sous-compte
+        $code = 'SUB-' . rand(10000, 99999);
 
-        // 3. Vérifier si le client possède déjà cette tontine
-        $exists = DB::table('sub_accounts')
-            ->where('account_id', $account->id)
+        // Vérifier l'existence préalable de ce sous-compte
+        $exists = SubAccount::where('account_id', $account->id)
             ->where('tontine_plan_id', $request->tontine_plan_id)
             ->exists();
 
         if ($exists) {
             return redirect()->back()->with('error', 'Le client possède déjà ce type de tontine.');
         }
+        $tontineTypes = Tontine_plan::pluck('name', 'id');
+        $tontineName = $tontineTypes[$request->tontine_plan_id] ?? ucfirst($request->tontine_plan_id);
 
         DB::beginTransaction();
         try {
-            // 4. Créer le sous-compte dans 'sub_accounts'
-            $subAccountId = DB::table('sub_accounts')->insertGetId([
+            $subAccount = SubAccount::create([
                 'account_id'         => $account->id,
-                'code'               => 'SUB-' . strtoupper(Str::random(3)) . '-' . rand(100, 999),
-                'name'               => ucfirst($request->tontine_plan_id),
+                'code'               => $code, // 👈 Ajout du champ 'code' obligatoire
+                // 'sub_account_id' => $code, // Si la colonne existe aussi
+                'name'               => $tontineName,
                 'tontine_plan_id'    => $request->tontine_plan_id,
                 'balance'            => $request->initial_deposit,
                 'status'             => 'active',
-                'created_at'         => now(),
-                'updated_at'         => now(),
             ]);
 
-            // 5. Enregistrer la transaction
             DB::table('transactions')->insert([
                 'account_id'     => $account->id,
-                'sub_account_id' => $subAccountId,
+                'sub_account_id' => $subAccount->id,
                 'performed_by'   => $comptable->id,
                 'type'           => 'deposit',
                 'amount'         => $request->initial_deposit,
                 'fees'           => 0.00,
                 'reference'      => 'DEP-NEW-' . strtoupper(Str::random(8)),
-                'description'    => 'Ouverture nouvelle tontine : ' . ucfirst($request->tontine_plan_id),
+                'description'    => 'Activation Tontine : ' . ucfirst($request->tontine_plan_id),
                 'created_at'     => now(),
                 'updated_at'     => now(),
             ]);
 
             DB::commit();
-            return redirect()->back()->with('success', 'Nouvelle tontine ajoutée avec succès !');
+            return redirect()->back()->with('success', 'Nouvelle tontine souscrite avec succès !');
 
         } catch (\Exception $e) {
             DB::rollBack();
-            return redirect()->back()->with('error', 'Erreur : ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Erreur lors de la création : ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Traiter les dépôts/retraits depuis le Guichet Express.
+     */
+    public function storeGuichetTransaction(Request $request)
+    {
+        $request->validate([
+            'user_id'        => 'required|exists:users,id',
+            'sub_account_id' => 'nullable|exists:sub_accounts,id',
+            'type'           => 'required|in:deposit,withdrawal',
+            'amount'         => 'required|numeric|min:100',
+        ]);
+
+        $comptable = Auth::user();
+        $account = Account::where('user_id', $request->user_id)->firstOrFail();
+
+        $fees = 0;
+        if ($request->type === 'withdrawal') {
+            $tranches = ceil($request->amount / 25000);
+            $fees = $tranches * 500;
+        }
+
+        $totalDebite = $request->amount + $fees;
+
+        DB::beginTransaction();
+        try {
+            $subAccount = $request->sub_account_id ? SubAccount::findOrFail($request->sub_account_id) : null;
+
+            if ($request->type === 'withdrawal') {
+                $soldeDispo = $subAccount ? $subAccount->balance : $account->balance;
+                if ($totalDebite > $soldeDispo) {
+                    $cible = $subAccount ? 'le sous-compte ' . $subAccount->name : 'le compte principal';
+                    throw new \Exception("Solde insuffisant sur {$cible} ({$soldeDispo} XAF dispo).");
+                }
+            }
+
+            if ($subAccount) {
+                if ($request->type === 'deposit') {
+                    $subAccount->increment('balance', $request->amount);
+                } else {
+                    $subAccount->decrement('balance', $totalDebite);
+                }
+            } else {
+                if ($request->type === 'deposit') {
+                    $account->increment('balance', $request->amount);
+                } else {
+                    $account->decrement('balance', $totalDebite);
+                }
+            }
+
+            DB::table('transactions')->insert([
+                'account_id'     => $account->id,
+                'sub_account_id' => $subAccount ? $subAccount->id : null,
+                'performed_by'   => $comptable->id,
+                'type'           => $request->type,
+                'amount'         => $request->amount,
+                'fees'           => $fees,
+                'reference'      => ($request->type === 'deposit' ? 'DEP-' : 'RET-') . strtoupper(Str::random(8)),
+                'description'    => ($request->type === 'deposit' ? 'Dépôt' : 'Retrait') . ' Express au guichet (' . ($subAccount ? $subAccount->name : 'Compte principal') . ')',
+                'created_at'     => now(),
+                'updated_at'     => now(),
+            ]);
+
+            DB::commit();
+            return redirect()->back()->with('success', 'Opération réalisée avec succès !');
+
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return redirect()->back()->with('error', $e->getMessage());
         }
     }
 
@@ -988,6 +975,56 @@ class ComptableDashboardController extends Controller
         }
 
         return redirect()->back()->with('success', $msg);
+    }
+
+    public function toggleBlock($id)
+    {
+        $client = User::findOrFail($id);
+
+        // Alterne entre 'suspended' et 'active'
+        $client->status = ($client->status === 'suspended') ? 'active' : 'suspended';
+        $client->save();
+
+        $message = $client->status === 'suspended' ? 'Compte bloqué avec succès.' : 'Compte débloqué avec succès.';
+        return back()->with('success', $message);
+    }
+
+    /**
+     * Réinitialiser le mot de passe du client.
+     */
+    public function resetPassword(Request $request, $id)
+    {
+        $request->validate([
+            'password' => 'required|string|min:8|confirmed',
+        ]);
+
+        $client = User::findOrFail($id);
+        $client->password = Hash::make($request->password);
+        $client->save();
+
+        return back()->with('success', 'Le mot de passe du client a été réinitialisé.');
+    }
+
+    /**
+     * Geler ou suspendre le compte pour une période donnée.
+     */
+    public function freeze(Request $request, $id)
+    {
+        $request->validate([
+            'status'          => 'required|in:frozen,suspended',
+            'freeze_start_at' => 'required|date',
+            'freeze_end_at'   => 'required|date|after_or_equal:freeze_start_at',
+            'reason'          => 'nullable|string|max:255',
+        ]);
+
+        $client = User::findOrFail($id);
+        $client->status = $request->status;
+        $client->freeze_start_at = $request->freeze_start_at;
+        $client->freeze_end_at = $request->freeze_end_at;
+        $client->freeze_reason = $request->reason;
+        $client->save();
+
+        return back()->with('success', 'La restriction a été appliquée au compte.');
     }
 
     public function stockVente(Request $request)

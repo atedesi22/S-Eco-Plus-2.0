@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Models\Account;
+use App\Models\Product;
+use App\Models\SubAccount;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -31,6 +33,11 @@ class Transaction extends Model
     public function account()
     {
         return $this->belongsTo(Account::class);
+    }
+
+    public function subAccount()
+    {
+        return $this->belongsTo(SubAccount::class, 'sub_account_id');
     }
 
     // La transaction a été opérée par un utilisateur spécifique (Collectrice, Commercial, Admin, etc.)

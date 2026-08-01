@@ -28,7 +28,7 @@ return new class extends Migration
 
             // --- PARAMÈTRES DE SÉCURITÉ ---
             $table->boolean('mfa_enabled')->default(false); // Pour l'authentification à deux facteurs
-            $table->enum('status', ['active', 'suspended'])->default('active'); // Contrôle d'accès global
+            $table->enum('status', ['active', 'blocked', 'suspended'])->default('active'); // Contrôle d'accès global
 
             $table->rememberToken();
             $table->timestamps();

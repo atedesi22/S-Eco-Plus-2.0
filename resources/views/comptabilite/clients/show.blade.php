@@ -1,304 +1,422 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="space-y-6" x-data="{ openAddTontineModal: false, openStatusModal: false }">
 
-    <!-- En-tête Client -->
-    <div class="flex flex-col justify-between gap-4 md:flex-row md:items-center">
-        <div class="flex items-center gap-4">
-            <div class="flex items-center justify-center w-12 h-12 text-lg font-bold border rounded-2xl bg-emerald-500/10 border-emerald-500/20 text-emerald-400">
-                {{ strtoupper(substr($client->name, 0, 2)) }}
-            </div>
-            <div>
-                <div class="flex items-center gap-2">
-                    <h1 class="text-xl font-bold text-white">{{ $client->name }}</h1>
-                    <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold border uppercase
-                        {{ $client->status === 'active' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20' }}">
-                        {{ $client->status === 'active' ? 'Compte Valide' : 'Compte Inactif / Suspendu' }}
-                    </span>
-                </div>
-                <p class="text-xs text-slate-400">Client inscrit le {{ $client->created_at->format('d/m/Y à H:i') }} | Tél : <span class="font-mono font-bold text-white">{{ $client->phone }}</span></p>
-            </div>
-        </div>
+<div x-data="{
+        openAddTontineModal: false,
+        openResetPasswordModal: false,
+        openFreezeAccountModal: false,
+        searchQuery: '',
+        dateFrom: '',
+        dateTo: '',
+        typeFilter: 'all',
 
-        <!-- Boutons d'actions / Gestion du statut -->
-        <div class="flex flex-wrap items-center gap-2">
-            <button @click="openAddTontineModal = true" class="px-3 py-2 text-xs font-bold text-slate-950 bg-emerald-500 hover:bg-emerald-400 rounded-xl transition flex items-center gap-1.5">
-                <i class="bi bi-plus-circle-fill"></i> Ajouter une Tontine
-            </button>
+        // Fonction de filtrage côté client pour recherche instantanée
+        filterTransaction(date, type, desc, ref) {
+            let matchQuery = !this.searchQuery || desc.toLowerCase().includes(this.searchQuery.toLowerCase()) || ref.toLowerCase().includes(this.searchQuery.toLowerCase());
+            let matchType = this.typeFilter === 'all' || type === this.typeFilter;
+            let matchDateFrom = !this.dateFrom || date >= this.dateFrom;
+            let matchDateTo = !this.dateTo || date <= this.dateTo;
+            return matchQuery && matchType && matchDateFrom && matchDateTo;
+        }
+    }" class="min-h-screen p-4 space-y-6 font-sans md:p-8 bg-slate-950 text-slate-100">
 
-            <button @click="openStatusModal = true" class="px-3 py-2 text-xs font-bold text-white bg-slate-800 hover:bg-slate-700 rounded-xl border border-slate-700 transition flex items-center gap-1.5">
-                <i class="bi bi-shield-lock-fill"></i> Modifier État / Actions
-            </button>
-        </div>
-    </div>
-
-    <!-- Alertes -->
+    <!-- Flash Messages -->
     @if(session('success'))
-        <div class="p-4 text-xs font-semibold border rounded-xl bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
-            {{ session('success') }}
+        <div class="flex items-center justify-between p-4 text-xs font-bold border shadow-lg text-emerald-400 bg-emerald-950/40 border-emerald-800/60 rounded-2xl backdrop-blur-md">
+            <span class="flex items-center gap-2">
+                <i class="text-sm bi bi-check-circle-fill text-emerald-400"></i> {{ session('success') }}
+            </span>
+            <button onclick="this.parentElement.remove()" class="text-slate-400 hover:text-white"><i class="bi bi-x-lg"></i></button>
         </div>
     @endif
     @if(session('error'))
-        <div class="p-4 text-xs font-semibold border rounded-xl bg-rose-500/10 text-rose-400 border-rose-500/20">
-            {{ session('error') }}
+        <div class="flex items-center justify-between p-4 text-xs font-bold text-red-400 border shadow-lg bg-red-950/40 border-red-800/60 rounded-2xl backdrop-blur-md">
+            <span class="flex items-center gap-2">
+                <i class="text-sm text-red-400 bi bi-exclamation-triangle-fill"></i> {{ session('error') }}
+            </span>
+            <button onclick="this.parentElement.remove()" class="text-slate-400 hover:text-white"><i class="bi bi-x-lg"></i></button>
         </div>
     @endif
 
-    <!-- Grille Informations de Contexte & Territoire -->
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+    <!-- Navigation Header -->
+    <div class="flex flex-col justify-between gap-4 pb-4 border-b md:flex-row md:items-center border-slate-800/80">
+        <div>
+            <a href="{{ route('comptabilite.clients.index') }}" class="inline-flex items-center gap-2 mb-2 text-xs font-medium transition-colors text-slate-400 hover:text-emerald-400">
+                <i class="text-sm bi bi-arrow-left"></i> Retour à la liste des clients
+            </a>
+            <div class="flex items-center gap-3">
+                <h1 class="text-2xl font-black tracking-tight text-white">{{ $client->name }}</h1>
+                @php
+                    $statusColor = match($client->status ?? 'active') {
+                        'active' => 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+                        'suspended' => 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+                        'frozen' => 'bg-blue-500/10 text-blue-400 border-blue-500/30',
+                        'blocked' => 'bg-red-500/10 text-red-400 border-red-500/30',
+                        default => 'bg-slate-800 text-slate-400 border-slate-700'
+                    };
+                    $statusLabel = match($client->status ?? 'active') {
+                        'active' => 'Compte Actif',
+                        'suspended' => 'Suspendu',
+                        'frozen' => 'Gelé',
+                        'blocked' => 'Bloqué',
+                        default => 'Inactif'
+                    };
+                @endphp
+                <span class="px-2.5 py-1 text-[10px] font-bold tracking-wider uppercase border rounded-full {{ $statusColor }}">
+                    {{ $statusLabel }}
+                </span>
+            </div>
+            <p class="mt-1 text-xs text-slate-400">Code Client: <span class="font-mono font-bold text-slate-200">{{ $client->code ?? 'CLI-'.str_pad($client->id, 5, '0', STR_PAD_LEFT) }}</span></p>
+        </div>
 
-        <!-- Carte Profil & Territoire -->
-        <div class="p-5 space-y-3 border bg-slate-900 border-slate-800 rounded-2xl">
-            <h3 class="pb-2 text-xs font-bold tracking-wider uppercase border-b text-slate-400 border-slate-800">Informations Territoriales</h3>
+        <!-- Boutons d'Action Principaux -->
+        <div class="flex items-center gap-3">
+            <button @click="openAddTontineModal = true" class="px-4 py-2.5 text-xs font-bold transition-all text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-xl shadow-lg shadow-emerald-500/10 flex items-center gap-2">
+                <i class="text-sm bi bi-plus-circle-fill"></i> Nouvelle Tontine
+            </button>
 
-            <div class="space-y-2 text-xs">
+            <!-- Dropdown Options d'Administration -->
+            <div x-data="{ openOptions: false }" class="relative">
+                <button @click="openOptions = !openOptions" @click.away="openOptions = false" class="p-2.5 text-xs font-bold text-slate-300 bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl transition">
+                    <i class="text-sm bi bi-three-dots-vertical"></i>
+                </button>
+
+                <div x-show="openOptions" x-cloak class="absolute right-0 z-30 w-56 p-1 mt-2 space-y-1 border shadow-2xl bg-slate-900 border-slate-800 rounded-2xl backdrop-blur-xl">
+                    <button @click="openResetPasswordModal = true; openOptions = false" class="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl transition">
+                        <i class="bi bi-key text-amber-400"></i> Réinitialiser mot de passe
+                    </button>
+                    <button @click="openFreezeAccountModal = true; openOptions = false" class="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl transition">
+                        <i class="text-blue-400 bi bi-snow2"></i> Geler / Suspendre compte
+                    </button>
+                    <div class="my-1 border-t border-slate-800"></div>
+                    <form action="{{ route('comptabilite.clients.toggle-block', $client->id) }}" method="POST" onsubmit="return confirm('Êtes-vous sûr de vouloir modifier le statut de ce compte ?')">
+                        @csrf
+                        <button type="submit" class="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-red-400 hover:bg-red-950/40 rounded-xl transition">
+                            <i class="bi bi-shield-lock"></i> {{ ($client->status ?? '') === 'blocked' ? 'Débloquer le compte' : 'Bloquer définitivement' }}
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Grille d'Informations du Client & Attribution -->
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+
+        <!-- Carte 1: Profil Informations -->
+        <div class="p-5 space-y-4 border bg-slate-900/60 border-slate-800/80 rounded-2xl">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-800/60">
+                <span class="flex items-center gap-2 text-xs font-bold tracking-wider uppercase text-slate-400">
+                    <i class="bi bi-person-vcard text-emerald-400"></i> Informations Personnelles
+                </span>
+                <span class="text-[10px] text-slate-500">Inscrit le {{ $client->created_at ? $client->created_at->format('d/m/Y') : 'N/A' }}</span>
+            </div>
+
+            <div class="space-y-2.5 text-xs">
                 <div class="flex justify-between">
-                    <span class="text-slate-500">Agence :</span>
-                    <span class="font-bold text-white">{{ $client->structure->name ?? 'N/A' }}</span>
+                    <span class="text-slate-400">Téléphone:</span>
+                    <span class="font-mono font-bold text-slate-200">{{ $client->phone ?? 'Non renseigné' }}</span>
                 </div>
                 <div class="flex justify-between">
-                    <span class="text-slate-500">Zone d'appartenance :</span>
-                    <span class="font-bold text-emerald-400">{{ $client->zone->name ?? 'Non assignée' }}</span>
+                    <span class="text-slate-400">Email:</span>
+                    <span class="font-medium text-slate-200">{{ $client->email ?? 'Non renseigné' }}</span>
                 </div>
                 <div class="flex justify-between">
-                    <span class="text-slate-500">Agent Créateur :</span>
-                    <span class="font-bold text-white">{{ $creator->name ?? 'Système / Inconnu' }}</span>
+                    <span class="text-slate-400">CNI / NUI:</span>
+                    <span class="font-mono text-slate-200">{{ $client->cni_number ?? $client->identity_card ?? 'N/A' }}</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-400">Adresse:</span>
+                    <span class="font-medium text-slate-200">{{ $client->address ?? 'N/A' }}</span>
                 </div>
             </div>
         </div>
 
-        <!-- Collectrices Affectées à la Zone -->
-        <div class="p-5 space-y-3 border bg-slate-900 border-slate-800 rounded-2xl">
-            <h3 class="pb-2 text-xs font-bold tracking-wider uppercase border-b text-slate-400 border-slate-800">Collectrices Affectées (Zone)</h3>
+        <!-- Carte 2: Attribution, Collectrice & Zone -->
+        <div class="p-5 space-y-4 border bg-slate-900/60 border-slate-800/80 rounded-2xl">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-800/60">
+                <span class="flex items-center gap-2 text-xs font-bold tracking-wider uppercase text-slate-400">
+                    <i class="bi bi-diagram-3 text-cyan-400"></i> Zone & Attributions
+                </span>
+            </div>
 
-            <div class="space-y-2">
-                @forelse($collectrices as $col)
-                    <div class="flex items-center justify-between p-2 text-xs border bg-slate-950 border-slate-800 rounded-xl">
-                        <span class="font-bold text-white">{{ $col->name }}</span>
-                        <span class="font-mono text-[10px] text-slate-400">{{ $col->phone }}</span>
+            <div class="space-y-3 text-xs">
+                <!-- Zone -->
+                <div class="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/50">
+                    <span class="text-slate-400">Secteur / Zone:</span>
+                    <span class="font-bold text-cyan-400">{{ $client->zone->name ?? $client->sector ?? 'Non attribuée' }}</span>
+                </div>
+                <!-- Collectrice attitrée -->
+                <div class="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/50">
+                    <div>
+                        <span class="block text-[10px] text-slate-500">Collectrice Dédiée</span>
+                        <span class="font-bold text-slate-200">{{ $client->collector->name ?? $client->zone->collector->name ?? 'Aucune attribuée' }}</span>
                     </div>
-                @empty
-                    <p class="text-xs text-slate-500">Aucune collectrice affectée à cette zone.</p>
-                @endforelse
+                    <i class="text-lg bi bi-person-badge text-slate-400"></i>
+                </div>
+                <!-- Agent Créateur -->
+                <div class="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/50">
+                    <div>
+                        <span class="block text-[10px] text-slate-500">Créateur du Compte</span>
+                        <span class="font-bold text-slate-200">{{ $client->creator->name ?? 'Système / Auto-inscription' }}</span>
+                    </div>
+                    <i class="text-lg bi bi-person-plus text-slate-400"></i>
+                </div>
             </div>
         </div>
 
-        <!-- Panier / Boutique Électroménager -->
-        <div class="p-5 space-y-3 border bg-slate-900 border-slate-800 rounded-2xl">
-            <h3 class="flex justify-between pb-2 text-xs font-bold tracking-wider uppercase border-b text-slate-400 border-slate-800">
-                <span>Panier Boutique (Électroménager)</span>
-                <i class="bi bi-cart-check text-emerald-400"></i>
-            </h3>
-
-            <div class="space-y-2 text-xs">
-                <div class="flex justify-between">
-                    <span class="text-slate-500">Achats Effectués :</span>
-                    <span class="font-bold text-white">{{ $boutiqueTransactions->count() }} article(s)</span>
+        <!-- Carte 3: Aperçu des Soldes -->
+        <div class="flex flex-col justify-between p-5 space-y-4 border bg-slate-900/60 border-slate-800/80 rounded-2xl">
+            <div>
+                <div class="flex items-center justify-between pb-3 border-b border-slate-800/60">
+                    <span class="flex items-center gap-2 text-xs font-bold tracking-wider uppercase text-slate-400">
+                        <i class="bi bi-wallet2 text-emerald-400"></i> Position Financière
+                    </span>
+                    <span class="text-[10px] text-emerald-400 font-bold">XAF</span>
                 </div>
-                <div class="flex justify-between">
-                    <span class="text-slate-500">Total Réglé :</span>
-                    <span class="font-bold text-emerald-400">{{ number_format($boutiqueTransactions->sum('amount'), 0, ',', ' ') }} XAF</span>
+
+                <div class="mt-4">
+                    <span class="text-[11px] text-slate-400">Solde Global Cumulé</span>
+                    <p class="text-3xl font-black text-emerald-400 tracking-tight mt-0.5">
+                        {{ number_format($client->accounts ? $client->accounts->sum('balance') : 0, 0, ',', ' ') }} <span class="text-sm font-normal text-slate-400">XAF</span>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Badges Sous-Comptes -->
+            <div class="pt-3 border-t border-slate-800/60">
+                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">Tontines Actives</span>
+                <div class="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                    @php
+                        $hasSubAccounts = $client->accounts && $client->accounts->flatMap->subAccounts->isNotEmpty();
+                    @endphp
+
+                    @if($hasSubAccounts)
+                        @foreach($client->accounts as $acc)
+                            @foreach($acc->subAccounts as $sub)
+                                <span class="px-2.5 py-1 text-[10px] font-bold bg-slate-800/90 text-emerald-300 border border-slate-700/80 rounded-lg flex items-center gap-1.5">
+                                    <i class="bi bi-pie-chart-fill text-[9px] text-emerald-400"></i>
+                                    {{ $sub->name }}: <span class="font-mono text-white">{{ number_format($sub->balance, 0, ',', ' ') }}</span>
+                                </span>
+                            @endforeach
+                        @endforeach
+                    @else
+                        <span class="text-[11px] text-slate-500 italic">Aucune tontine active actuellement.</span>
+                    @endif
                 </div>
             </div>
         </div>
 
     </div>
 
-    <!-- Section Tontines Souscrites -->
-    <div class="space-y-3">
-        <div class="flex items-center justify-between">
-            <h2 class="text-sm font-bold text-white">Tontines Actives & Portefeuilles ({{ $client->accounts->count() }})</h2>
-        </div>
+    <!-- Section Historique des Transactions & Filtres -->
+    <div class="p-6 space-y-6 border bg-slate-900/60 border-slate-800/80 rounded-2xl">
 
-        <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-            @foreach($client->accounts as $acc)
-                <div class="p-4 space-y-3 transition border bg-slate-900 border-slate-800 rounded-2xl hover:border-slate-700">
-                    <div class="flex items-center justify-between pb-2 border-b border-slate-800">
-                        <span class="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-emerald-400 text-[10px] uppercase font-bold">
-                            Tontine {{ $acc->type }}
-                        </span>
-                        <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase
-                            {{ $acc->status === 'active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400' }}">
-                            {{ $acc->status }}
-                        </span>
-                    </div>
+        <!-- Barre d'outils / Filtres -->
+        <div class="flex flex-col justify-between gap-4 pb-4 border-b lg:flex-row lg:items-center border-slate-800/80">
+            <div>
+                <h2 class="flex items-center gap-2 text-base font-bold text-white">
+                    <i class="bi bi-clock-history text-emerald-400"></i> Historique des Transactions
+                </h2>
+                <p class="text-xs text-slate-400">Consultez et filtrez les mouvements financiers de ce client.</p>
+            </div>
 
-                    <div class="space-y-1">
-                        <p class="text-[10px] text-slate-500 font-mono">N° {{ $acc->account_number }}</p>
-                        <p class="text-xl font-bold text-white">{{ number_format($acc->balance, 0, ',', ' ') }} <span class="text-xs font-normal text-slate-400">XAF</span></p>
-                    </div>
-
-                    <div class="p-2 bg-slate-950 rounded-xl flex justify-between items-center text-[11px] border border-slate-800">
-                        <span class="text-slate-400">Fond de Caisse Réserver :</span>
-                        <span class="font-bold text-amber-400">1 000 XAF</span>
-                    </div>
+            <!-- Formulaire de recherche et filtres AlpineJS -->
+            <div class="flex flex-wrap items-center gap-2.5">
+                <!-- Recherche texte -->
+                <div class="relative">
+                    <i class="bi bi-search absolute left-3 top-2.5 text-xs text-slate-500"></i>
+                    <input type="text" x-model="searchQuery" placeholder="Référence, libellé..." class="w-40 py-2 pl-8 pr-3 text-xs text-white border outline-none sm:w-48 bg-slate-950 border-slate-800 rounded-xl focus:border-emerald-500/50">
                 </div>
-            @endforeach
-        </div>
-    </div>
 
-    <!-- Section Historique Général des Transactions -->
-    <div class="p-4 space-y-4 overflow-hidden border bg-slate-900 border-slate-800 rounded-2xl">
-
-        <div class="flex flex-col justify-between gap-3 pb-3 border-b md:flex-row md:items-center border-slate-800">
-            <h2 class="text-sm font-bold text-white">Historique de toutes les Transactions</h2>
-
-            <!-- Filtre de Date et Type -->
-            <form method="GET" action="{{ route('comptabilite.clients.show', $client->id) }}" class="flex flex-wrap items-center gap-2">
-                <input type="date" name="start_date" value="{{ $startDate }}" class="px-2.5 py-1 text-xs text-white bg-slate-950 border border-slate-800 rounded-lg">
-                <span class="text-xs text-slate-500">à</span>
-                <input type="date" name="end_date" value="{{ $endDate }}" class="px-2.5 py-1 text-xs text-white bg-slate-950 border border-slate-800 rounded-lg">
-
-                <select name="tx_type" class="px-2.5 py-1 text-xs text-white bg-slate-950 border border-slate-800 rounded-lg">
-                    <option value="">Tous les Types</option>
-                    <option value="deposit" {{ $txType === 'deposit' ? 'selected' : '' }}>Dépôts</option>
-                    <option value="withdrawal" {{ $txType === 'withdrawal' ? 'selected' : '' }}>Retraits</option>
-                    <option value="product_payment" {{ $txType === 'product_payment' ? 'selected' : '' }}>Achat Boutique</option>
-                    <option value="account_maintenance_fee" {{ $txType === 'account_maintenance_fee' ? 'selected' : '' }}>Frais Tenue Compte</option>
+                <!-- Filtre par type -->
+                <select x-model="typeFilter" class="px-3 py-2 text-xs text-white border outline-none bg-slate-950 border-slate-800 rounded-xl focus:border-emerald-500/50">
+                    <option value="all">Tous les types</option>
+                    <option value="deposit">Dépôts (+)</option>
+                    <option value="withdrawal">Retraits (-)</option>
+                    <option value="tontine">Cotisations Tontine</option>
                 </select>
 
-                <button type="submit" class="px-3 py-1 text-xs font-bold rounded-lg text-slate-950 bg-emerald-500 hover:bg-emerald-400">
-                    <i class="bi bi-funnel"></i>
+                <!-- Filtre Date Début & Fin -->
+                <div class="flex items-center gap-1 px-2 py-1 border bg-slate-950 border-slate-800 rounded-xl">
+                    <input type="date" x-model="dateFrom" class="p-1 text-xs bg-transparent outline-none text-slate-300">
+                    <span class="text-xs text-slate-600">à</span>
+                    <input type="date" x-model="dateTo" class="p-1 text-xs bg-transparent outline-none text-slate-300">
+                </div>
+
+                <!-- Reset Filtres -->
+                <button @click="searchQuery = ''; dateFrom = ''; dateTo = ''; typeFilter = 'all'" class="p-2 text-xs text-slate-400 hover:text-white bg-slate-800 rounded-xl" title="Réinitialiser">
+                    <i class="bi bi-arrow-counterclockwise"></i>
                 </button>
-            </form>
+            </div>
         </div>
 
+        <!-- Tableau des Transactions -->
         <div class="overflow-x-auto">
-            <table class="w-full text-xs text-left text-slate-400">
-                <thead class="bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
-                    <tr>
-                        <th class="px-4 py-3">Date</th>
-                        <th class="px-4 py-3">Réf / Tontine</th>
-                        <th class="px-4 py-3">Type</th>
-                        <th class="px-4 py-3">Opérateur</th>
-                        <th class="px-4 py-3 text-right">Montant</th>
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="text-[11px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800">
+                        <th class="px-3 pb-3">Date</th>
+                        <th class="px-3 pb-3">Référence</th>
+                        <th class="px-3 pb-3">Type / Description</th>
+                        <th class="px-3 pb-3">Compte / Tontine</th>
+                        <th class="px-3 pb-3 text-right">Montant</th>
+                        <th class="px-3 pb-3 text-center">Statut</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-800">
-                    @forelse($transactions as $tx)
-                        <tr class="transition hover:bg-slate-800/50">
-                            <td class="px-4 py-3 text-slate-300 font-mono text-[11px]">
-                                {{ \Carbon\Carbon::parse($tx->created_at)->format('d/m/Y H:i') }}
+                <tbody class="text-xs divide-y divide-slate-800/50">
+                    @forelse($transactions ?? [] as $trx)
+                        <tr x-show="filterTransaction('{{ $trx->created_at->format('Y-m-d') }}', '{{ $trx->type }}', '{{ $trx->description }}', '{{ $trx->reference }}')" class="transition-colors hover:bg-slate-800/30">
+                            <td class="px-3 py-3 font-mono text-slate-400">
+                                {{ $trx->created_at->format('d/m/Y H:i') }}
                             </td>
-                            <td class="px-4 py-3 font-mono">
-                                <span class="block font-bold text-white">{{ $tx->reference }}</span>
-                                <span class="text-[10px] text-slate-500 uppercase">Tontine {{ $tx->account_type }}</span>
+                            <td class="px-3 py-3 font-mono font-bold text-emerald-400">
+                                {{ $trx->reference ?? 'TRX-'.$trx->id }}
                             </td>
-                            <td class="px-4 py-3">
-                                @if($tx->type === 'deposit')
-                                    <span class="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-bold text-[10px]">DÉPÔT</span>
-                                @elseif($tx->type === 'withdrawal')
-                                    <span class="px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 font-bold text-[10px]">RETRAIT</span>
-                                @else
-                                    <span class="px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 font-bold text-[10px]">{{ strtoupper($tx->type) }}</span>
-                                @endif
+                            <td class="px-3 py-3">
+                                <span class="block font-medium text-white">{{ $trx->description ?? 'Opération financière' }}</span>
+                                <span class="text-[10px] text-slate-500">Par: {{ $trx->operator->name ?? 'Système' }}</span>
                             </td>
-                            <td class="px-4 py-3 text-slate-300">{{ $tx->agent_name }}</td>
-                            <td class="px-4 py-3 text-right font-bold {{ $tx->type === 'deposit' ? 'text-emerald-400' : 'text-rose-400' }}">
-                                {{ $tx->type === 'deposit' ? '+' : '-' }} {{ number_format($tx->amount, 0, ',', ' ') }} XAF
+                            <td class="px-3 py-3 text-slate-300">
+                                {{ $trx->subAccount->name ?? $trx->account->type ?? 'Compte Principal' }}
+                            </td>
+                            <td class="py-3 px-3 text-right font-mono font-bold text-sm {{ $trx->type === 'withdrawal' ? 'text-red-400' : 'text-emerald-400' }}">
+                                {{ $trx->type === 'withdrawal' ? '-' : '+' }}{{ number_format($trx->amount, 0, ',', ' ') }} XAF
+                            </td>
+                            <td class="px-3 py-3 text-center">
+                                <span class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                    {{ ucfirst($trx->status ?? 'Succès') }}
+                                </span>
                             </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="5" class="px-4 py-6 text-center text-slate-500">Aucune transaction enregistrée.</td>
+                            <td colspan="6" class="py-8 italic text-center text-slate-500">
+                                Aucune transaction enregistrée pour ce client.
+                            </td>
                         </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
 
-        <div class="pt-2">
-            {{ $transactions->links() }}
-        </div>
+        <!-- Pagination Laravel si applicable -->
+        @if(isset($transactions) && method_exists($transactions, 'links'))
+            <div class="pt-4 border-t border-slate-800">
+                {{ $transactions->links() }}
+            </div>
+        @endif
     </div>
 
-    <!-- MODAL AJOUT D'UNE NOUVELLE TONTINE -->
-    <div x-show="openAddTontineModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" x-cloak>
-        <div class="w-full max-w-md p-6 space-y-4 border bg-slate-900 border-slate-800 rounded-2xl">
+    <!-- ================= MODALES ================= -->
+
+    <!-- Modale 1: Souscrire une Tontine -->
+    <div x-show="openAddTontineModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+        <div @click.away="openAddTontineModal = false" class="w-full max-w-md p-6 space-y-4 border shadow-2xl bg-slate-900 border-slate-800 rounded-2xl">
             <div class="flex items-center justify-between pb-3 border-b border-slate-800">
-                <h3 class="text-sm font-bold text-white">Souscrire une Nouvelle Tontine</h3>
+                <h3 class="flex items-center gap-2 text-sm font-bold text-white">
+                    <i class="bi bi-pie-chart text-emerald-400"></i> Souscrire une Nouvelle Tontine
+                </h3>
                 <button @click="openAddTontineModal = false" class="text-slate-400 hover:text-white"><i class="bi bi-x-lg"></i></button>
             </div>
-
-
 
             <form action="{{ route('comptabilite.clients.add-tontine', $client->id) }}" method="POST" class="space-y-4">
                 @csrf
                 <div>
                     <label class="block mb-1 text-[11px] font-semibold text-slate-300">Type de Tontine *</label>
-                    <select name="tontine_plan_id" required class="w-full px-3 py-2 text-xs text-white border bg-slate-950 border-slate-800 rounded-xl">
-                        @foreach($tontineTypes as $key => $label)
+                    <select name="tontine_plan_id" required class="w-full px-3 py-2 text-xs text-white border outline-none bg-slate-950 border-slate-800 rounded-xl focus:border-emerald-500">
+                        <option value="" disabled selected>-- Sélectionner une tontine --</option>
+
+                        @forelse($tontineTypes ?? [] as $key => $label)
                             <option value="{{ $key }}">{{ $label }}</option>
-                        @endforeach
+                        @empty
+                            <option value="" disabled>Aucun type de tontine disponible</option>
+                        @endforelse
                     </select>
                 </div>
 
                 <div>
-                    <label class="block mb-1 text-[11px] font-semibold text-slate-300">Dépôt Initial d'Activation (Min 1 000 XAF) *</label>
-                    <input type="number" min="1000" name="initial_deposit" value="1000" required class="w-full px-3 py-2 text-xs font-bold border text-emerald-400 bg-slate-950 border-slate-800 rounded-xl">
+                    <label class="block mb-1 text-[11px] font-semibold text-slate-300">Dépôt Initial (Min 1 000 XAF) *</label>
+                    <input type="number" min="1000" name="initial_deposit" value="1000" required class="w-full px-3 py-2 text-xs font-bold border outline-none text-emerald-400 bg-slate-950 border-slate-800 rounded-xl focus:border-emerald-500">
                 </div>
 
                 <div class="flex justify-end gap-2 pt-2">
-                    <button type="button" @click="openAddTontineModal = false" class="px-4 py-2 text-xs font-bold text-slate-400 bg-slate-800 rounded-xl">Annuler</button>
-                    <button type="submit" class="px-4 py-2 text-xs font-bold text-slate-950 bg-emerald-500 rounded-xl">Activer Tontine</button>
+                    <button type="button" @click="openAddTontineModal = false" class="px-4 py-2 text-xs font-bold text-slate-400 bg-slate-800 rounded-xl hover:bg-slate-700">Annuler</button>
+                    <button type="submit" class="px-4 py-2 text-xs font-bold text-slate-950 bg-emerald-400 rounded-xl hover:bg-emerald-300">Activer Tontine</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- MODAL GESTION DU STATUT / BLOCAGE / GEL / SUSPENSION -->
-    <div x-show="openStatusModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" x-cloak>
-        <div class="w-full max-w-md p-6 space-y-4 border bg-slate-900 border-slate-800 rounded-2xl">
+    <!-- Modale 2: Réinitialiser le mot de passe -->
+    <div x-show="openResetPasswordModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+        <div @click.away="openResetPasswordModal = false" class="w-full max-w-md p-6 space-y-4 border shadow-2xl bg-slate-900 border-slate-800 rounded-2xl">
             <div class="flex items-center justify-between pb-3 border-b border-slate-800">
-                <h3 class="text-sm font-bold text-white">Changer l'État du Compte Client</h3>
-                <button @click="openStatusModal = false" class="text-slate-400 hover:text-white"><i class="bi bi-x-lg"></i></button>
+                <h3 class="flex items-center gap-2 text-sm font-bold text-white">
+                    <i class="bi bi-key text-amber-400"></i> Réinitialiser le mot de passe
+                </h3>
+                <button @click="openResetPasswordModal = false" class="text-slate-400 hover:text-white"><i class="bi bi-x-lg"></i></button>
             </div>
 
-            <form action="{{ route('comptabilite.clients.update-status', $client->id) }}" method="POST" class="space-y-3">
+            <form action="{{ route('comptabilite.clients.reset-password', $client->id) }}" method="POST" class="space-y-4">
                 @csrf
-                <p class="text-xs text-slate-400">Choisissez l'action à appliquer sur le compte de <strong class="text-white">{{ $client->name }}</strong> :</p>
-
-                <div class="space-y-2">
-                    <label class="flex items-center justify-between p-3 border cursor-pointer bg-slate-950 border-slate-800 rounded-xl">
-                        <div class="flex items-center gap-2">
-                            <input type="radio" name="status" value="active" {{ $client->status === 'active' ? 'checked' : '' }} class="text-emerald-500">
-                            <span class="text-xs font-bold text-emerald-400">Activer le Compte</span>
-                        </div>
-                    </label>
-
-                    <label class="flex items-center justify-between p-3 border cursor-pointer bg-slate-950 border-slate-800 rounded-xl">
-                        <div class="flex items-center gap-2">
-                            <input type="radio" name="status" value="blocked" class="text-amber-500">
-                            <span class="text-xs font-bold text-amber-400">Bloquer Temporairement</span>
-                        </div>
-                    </label>
-
-                    <label class="flex items-center justify-between p-3 border cursor-pointer bg-slate-950 border-slate-800 rounded-xl">
-                        <div class="flex items-center gap-2">
-                            <input type="radio" name="status" value="suspended" class="text-rose-500">
-                            <span class="text-xs font-bold text-rose-400">Suspendre le Client</span>
-                        </div>
-                    </label>
-
-                    <label class="flex items-center justify-between p-3 border cursor-pointer bg-slate-950 border-slate-800 rounded-xl">
-                        <div class="flex items-center gap-2">
-                            <input type="radio" name="status" value="frozen" class="text-cyan-500">
-                            <span class="text-xs font-bold text-cyan-400">Geler les Tontines</span>
-                        </div>
-                    </label>
-
-                    <label class="flex items-center justify-between p-3 border cursor-pointer bg-slate-950 border-slate-800 rounded-xl">
-                        <div class="flex items-center gap-2">
-                            <input type="radio" name="status" value="closed" class="text-slate-500">
-                            <span class="text-xs font-bold text-slate-400">Clôturer / Supprimer</span>
-                        </div>
-                    </label>
+                <div>
+                    <label class="block mb-1 text-[11px] font-semibold text-slate-300">Nouveau mot de passe *</label>
+                    <input type="password" name="password" required placeholder="Minimum 8 caractères" class="w-full px-3 py-2 text-xs text-white border outline-none bg-slate-950 border-slate-800 rounded-xl focus:border-amber-500">
+                </div>
+                <div>
+                    <label class="block mb-1 text-[11px] font-semibold text-slate-300">Confirmer le mot de passe *</label>
+                    <input type="password" name="password_confirmation" required placeholder="Répéter le mot de passe" class="w-full px-3 py-2 text-xs text-white border outline-none bg-slate-950 border-slate-800 rounded-xl focus:border-amber-500">
                 </div>
 
-                <div class="flex justify-end gap-2 pt-3">
-                    <button type="button" @click="openStatusModal = false" class="px-4 py-2 text-xs font-bold text-slate-400 bg-slate-800 rounded-xl">Annuler</button>
-                    <button type="submit" class="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-xl">Appliquer la Modification</button>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" @click="openResetPasswordModal = false" class="px-4 py-2 text-xs font-bold text-slate-400 bg-slate-800 rounded-xl hover:bg-slate-700">Annuler</button>
+                    <button type="submit" class="px-4 py-2 text-xs font-bold text-slate-950 bg-amber-400 rounded-xl hover:bg-amber-300">Mettre à jour</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modale 3: Geler / Suspendre temporairement le compte -->
+    <div x-show="openFreezeAccountModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+        <div @click.away="openFreezeAccountModal = false" class="w-full max-w-md p-6 space-y-4 border shadow-2xl bg-slate-900 border-slate-800 rounded-2xl">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+                <h3 class="flex items-center gap-2 text-sm font-bold text-white">
+                    <i class="text-blue-400 bi bi-snow2"></i> Gel / Suspension du compte
+                </h3>
+                <button @click="openFreezeAccountModal = false" class="text-slate-400 hover:text-white"><i class="bi bi-x-lg"></i></button>
+            </div>
+
+            <form action="{{ route('comptabilite.clients.freeze', $client->id) }}" method="POST" class="space-y-4">
+                @csrf
+                <div>
+                    <label class="block mb-1 text-[11px] font-semibold text-slate-300">Type de restriction *</label>
+                    <select name="status" class="w-full px-3 py-2 text-xs text-white border outline-none bg-slate-950 border-slate-800 rounded-xl focus:border-blue-500">
+                        <option value="frozen">Geler temporairement (Aucun retrait autorisé)</option>
+                        <option value="suspended">Suspendre (Blocage total)</option>
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block mb-1 text-[11px] font-semibold text-slate-300">Date Début *</label>
+                        <input type="date" name="freeze_start_at" required class="w-full px-3 py-2 text-xs text-white border outline-none bg-slate-950 border-slate-800 rounded-xl focus:border-blue-500">
+                    </div>
+                    <div>
+                        <label class="block mb-1 text-[11px] font-semibold text-slate-300">Date Fin *</label>
+                        <input type="date" name="freeze_end_at" required class="w-full px-3 py-2 text-xs text-white border outline-none bg-slate-950 border-slate-800 rounded-xl focus:border-blue-500">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block mb-1 text-[11px] font-semibold text-slate-300">Motif de la restriction</label>
+                    <textarea name="reason" rows="2" placeholder="Ex: Inactivité prolongée, suspicion de fraude..." class="w-full px-3 py-2 text-xs text-white border outline-none bg-slate-950 border-slate-800 rounded-xl focus:border-blue-500"></textarea>
+                </div>
+
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" @click="openFreezeAccountModal = false" class="px-4 py-2 text-xs font-bold text-slate-400 bg-slate-800 rounded-xl hover:bg-slate-700">Annuler</button>
+                    <button type="submit" class="px-4 py-2 text-xs font-bold text-white bg-blue-600 rounded-xl hover:bg-blue-500">Appliquer la restriction</button>
                 </div>
             </form>
         </div>

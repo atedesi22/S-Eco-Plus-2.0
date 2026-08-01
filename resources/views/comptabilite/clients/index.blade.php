@@ -1,203 +1,216 @@
 @extends('layouts.app')
 
 @section('content')
-<div class="space-y-6" x-data="{ openNewModal: false }">
+<div x-data="guichetExpress()" class="min-h-screen p-6 space-y-6 bg-slate-950 text-slate-100">
+
+    <!-- Notifications Alertes -->
+    @if(session('success'))
+        <div class="p-4 mb-4 text-xs font-bold border text-emerald-400 bg-emerald-950/40 border-emerald-800/60 rounded-xl">
+            <i class="mr-2 bi bi-check-circle-fill"></i>{{ session('success') }}
+        </div>
+    @endif
+
+    @if(session('error'))
+        <div class="p-4 mb-4 text-xs font-bold text-red-400 border bg-red-950/40 border-red-800/60 rounded-xl">
+            <i class="mr-2 bi bi-exclamation-triangle-fill"></i>{{ session('error') }}
+        </div>
+    @endif
 
     <!-- En-tête -->
-    <div class="flex items-center justify-between">
+    <div class="flex flex-col justify-between gap-4 pb-4 border-b md:flex-row md:items-center border-slate-800">
         <div>
-            <h1 class="text-xl font-bold text-white">Gestion des Comptes Clients & Tontines</h1>
-            <p class="text-xs text-slate-400">Recherche, souscription de tontines et suivi des portefeuilles clients.</p>
-        </div>
-
-        <!-- Bouton Nouveau Client -->
-        <button @click="openNewModal = true" class="flex items-center gap-2 px-4 py-2 text-xs font-bold transition shadow-lg text-slate-950 bg-emerald-500 hover:bg-emerald-400 rounded-xl shadow-emerald-500/10">
-            <i class="text-sm bi bi-person-plus-fill"></i> Nouveau Client
-        </button>
-    </div>
-
-    <!-- Messages Flash -->
-    @if(session('success'))
-        <div class="p-4 text-xs font-semibold border rounded-xl bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
-            {{ session('success') }}
-        </div>
-    @endif
-    @if(session('error'))
-        <div class="p-4 text-xs font-semibold border rounded-xl bg-rose-500/10 text-rose-400 border-rose-500/20">
-            {{ session('error') }}
-        </div>
-    @endif
-
-    <!-- Cartes Macro -->
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div class="p-5 border bg-slate-900 border-slate-800 rounded-2xl">
-            <span class="text-xs font-medium text-slate-400">Clients Actifs dans l'Agence</span>
-            <p class="mt-1 text-2xl font-bold text-white">{{ number_format($totalClientsActifs) }} <span class="text-xs font-normal text-slate-400">membres</span></p>
-        </div>
-
-        <div class="p-5 border bg-slate-900 border-slate-800 rounded-2xl">
-            <span class="text-xs font-medium text-slate-400">Épargne Globale Cumulée</span>
-            <p class="mt-1 text-2xl font-bold text-emerald-400">{{ number_format($totalEpargneGlobal, 0, ',', ' ') }} <span class="text-xs font-normal text-slate-400">XAF</span></p>
+            <h1 class="flex items-center gap-2 text-xl font-bold text-white">
+                <i class="bi bi-people text-emerald-400"></i> Comptes Clients Agence
+            </h1>
+            <p class="text-xs text-slate-400">Gérez les comptes d'épargne et tontines des membres de votre agence.</p>
         </div>
     </div>
 
-    <!-- Filtres de recherche -->
-    <form method="GET" action="{{ route('comptabilite.clients.index') }}" class="grid grid-cols-1 gap-3 p-4 border bg-slate-900 border-slate-800 rounded-2xl md:grid-cols-3">
-        <div>
-            <label class="block mb-1 text-[11px] text-slate-400">Rechercher Client</label>
-            <input type="text" name="search" value="{{ $search }}" placeholder="Nom, Téléphone, Email..." class="w-full px-3 py-2 text-xs text-white border bg-slate-950 border-slate-800 rounded-xl focus:border-emerald-500">
-        </div>
-        <div>
-            <label class="block mb-1 text-[11px] text-slate-400">Type de Tontine</label>
-            <select name="account_type" class="w-full px-3 py-2 text-xs text-white border bg-slate-950 border-slate-800 rounded-xl focus:border-emerald-500">
-                <option value="">-- Toutes les Tontines --</option>
-                @foreach($tontineTypes as $key => $label)
-                    <option value="{{ $key }}" {{ $accountType === $key ? 'selected' : '' }}>{{ $label }}</option>
-                @endforeach
-            </select>
-        </div>
-        <div class="flex items-end">
-            <button type="submit" class="w-full py-2.5 text-xs font-bold text-slate-950 bg-emerald-500 hover:bg-emerald-600 rounded-xl transition">
-                <i class="bi bi-search"></i> Filtrer
-            </button>
-        </div>
-    </form>
+    <!-- GUICHET EXPRESS DE CAISSE -->
+    <div class="p-5 space-y-4 border bg-slate-900 border-slate-800 rounded-2xl">
+        <h2 class="flex items-center gap-2 text-xs font-bold tracking-wider uppercase text-emerald-400">
+            <i class="bi bi-lightning-charge-fill"></i> Guichet Express (Dépôt / Retrait Rapide)
+        </h2>
 
-    <!-- Tableau des Clients -->
+        <form action="{{ route('comptabilite.transactions.guichet') }}" method="POST" class="grid grid-cols-1 gap-4 md:grid-cols-4">
+            @csrf
+
+            <!-- Type d'opération -->
+            <div>
+                <label class="block mb-1 text-[11px] font-semibold text-slate-400">Type *</label>
+                <select name="type" x-model="type" required class="w-full px-3 py-2 text-xs text-white border outline-none bg-slate-950 border-slate-800 rounded-xl focus:border-emerald-500">
+                    <option value="deposit">Dépôt (+)</option>
+                    <option value="withdrawal">Retrait (-)</option>
+                </select>
+            </div>
+
+            <!-- Sélection du Client (Autocomplétion Alpine) -->
+            <div class="relative">
+                <label class="block mb-1 text-[11px] font-semibold text-slate-400">Client *</label>
+                <input type="hidden" name="user_id" :value="selectedClient ? selectedClient.id : ''" required>
+
+                <div @click="toggleDropdown()" class="flex items-center justify-between w-full px-3 py-2 text-xs text-white border cursor-pointer bg-slate-950 border-slate-800 rounded-xl">
+                    <span x-text="selectedClient ? selectedClient.name + ' (' + selectedClient.phone + ')' : 'Rechercher un client...'"></span>
+                    <i class="bi bi-chevron-down text-slate-500"></i>
+                </div>
+
+                <!-- Dropdown -->
+                <div x-show="open" @click.outside="open = false" class="absolute z-50 w-full mt-1 overflow-y-auto border shadow-2xl bg-slate-900 border-slate-800 rounded-xl max-h-48">
+                    <div class="sticky top-0 p-2 border-b bg-slate-900 border-slate-800">
+                        <input x-ref="searchInput" x-model="search" @input="filterClients()" type="text" placeholder="Nom ou Téléphone..." class="w-full px-2 py-1 text-xs text-white border rounded-lg outline-none bg-slate-950 border-slate-800">
+                    </div>
+                    <template x-for="client in filteredClients" :key="client.id">
+                        <div @click="selectClient(client)" class="flex justify-between px-3 py-2 text-xs cursor-pointer text-slate-300 hover:bg-slate-800">
+                            <span x-text="client.name"></span>
+                            <span class="font-mono text-slate-500" x-text="client.phone"></span>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Compte / Sous-Compte Cible -->
+            <div>
+                <label class="block mb-1 text-[11px] font-semibold text-slate-400">Destination *</label>
+                <select name="sub_account_id" x-model="selectedSubAccountId" class="w-full px-3 py-2 text-xs text-white border outline-none bg-slate-950 border-slate-800 rounded-xl focus:border-emerald-500">
+                    <option value="">Compte Principal (Épargne)</option>
+                    <template x-if="selectedClient && selectedClient.sub_accounts">
+                        <template x-for="sub in selectedClient.sub_accounts" :key="sub.id">
+                            <option :value="sub.id" x-text="sub.name + ' (Solde: ' + formatMoney(sub.balance) + ' XAF)'"></option>
+                        </template>
+                    </template>
+                </select>
+            </div>
+
+            <!-- Montant & Bouton -->
+            <div class="flex items-end gap-2">
+                <div class="flex-1">
+                    <label class="block mb-1 text-[11px] font-semibold text-slate-400">Montant (XAF) *</label>
+                    <input type="number" name="amount" min="100" required placeholder="Ex: 5000" class="w-full px-3 py-2 text-xs font-bold border outline-none text-emerald-400 bg-slate-950 border-slate-800 rounded-xl focus:border-emerald-500">
+                </div>
+                <button type="submit" class="px-4 py-2 text-xs font-bold transition text-slate-950 bg-emerald-500 hover:bg-emerald-400 rounded-xl">
+                    Valider
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- LISTE DES CLIENTS -->
     <div class="overflow-hidden border bg-slate-900 border-slate-800 rounded-2xl">
+        <div class="flex items-center justify-between p-4 border-b border-slate-800">
+            <h3 class="text-xs font-bold tracking-wider text-white uppercase">Répertoire des Clients</h3>
+
+            <form action="{{ route('comptabilite.clients.index') }}" method="GET" class="flex gap-2">
+                <input type="text" name="search" value="{{ request('search') }}" placeholder="Rechercher..." class="px-3 py-1.5 text-xs text-white bg-slate-950 border border-slate-800 rounded-xl outline-none">
+                <button type="submit" class="px-3 py-1.5 text-xs bg-slate-800 text-slate-300 rounded-xl hover:bg-slate-700">Filtrer</button>
+            </form>
+        </div>
+
         <div class="overflow-x-auto">
-            <table class="w-full text-xs text-left text-slate-400">
-                <thead class="bg-slate-950 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
-                    <tr>
-                        <th class="px-6 py-3.5">Client</th>
-                        <th class="px-6 py-3.5">Zone</th>
-                        <th class="px-6 py-3.5">Tontines Souscrites</th>
-                        <th class="px-6 py-3.5 text-right">Solde Total</th>
-                        <th class="px-6 py-3.5 text-center">Statut</th>
-                        <th class="px-6 py-3.5 text-center">Action</th>
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800 bg-slate-950/50">
+                        <th class="p-3">Client</th>
+                        <th class="p-3">Téléphone</th>
+                        <th class="p-3">Solde Compte Principal</th>
+                        <th class="p-3">Sous-comptes / Tontines</th>
+                        <th class="p-3 text-right">Actions</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-slate-800">
+                <tbody class="text-xs divide-y divide-slate-800 text-slate-300">
                     @forelse($clients as $client)
-                        <tr class="transition hover:bg-slate-800/50">
-                            <td class="px-6 py-4 font-bold text-white">
-                                {{ $client->name }}
-                                <span class="block text-[10px] text-slate-500 font-normal">{{ $client->phone }}</span>
-                            </td>
-                            <td class="px-6 py-4">
-                                <span class="px-2 py-1 bg-slate-800 text-slate-300 rounded-md font-medium text-[11px]">
-                                    {{ $client->zone->name ?? 'Non assignée' }}
-                                </span>
-                            </td>
-                            <td class="px-6 py-4">
-                                <div class="flex flex-wrap gap-1">
-                                    @foreach($client->accounts as $acc)
-                                        <span class="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-emerald-400 text-[10px] uppercase font-bold">
-                                            {{ $acc->type }}
-                                        </span>
-                                    @endforeach
-                                </div>
-                            </td>
-                            <td class="px-6 py-4 text-sm font-bold text-right text-emerald-400">
+                        <tr class="hover:bg-slate-800/50">
+                            <td class="p-3 font-semibold text-white">{{ $client->name }}</td>
+                            <td class="p-3 font-mono text-slate-400">{{ $client->phone ?? 'N/A' }}</td>
+                            <td class="p-3 font-bold text-emerald-400">
                                 {{ number_format($client->accounts->sum('balance'), 0, ',', ' ') }} XAF
                             </td>
-                            <td class="px-6 py-4 text-center">
-                                @if($client->status === 'active')
-                                    <span class="px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px] font-bold">Actif</span>
-                                @else
-                                    <span class="px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/20 text-[10px] font-bold">Suspendu</span>
-                                @endif
+                            <td class="p-3">
+                                <div class="flex flex-wrap gap-1">
+                                    @php
+                                        // Vérifie si le client a au moins un sous-compte à travers tous ses comptes
+                                        $hasSubAccounts = $client->accounts && $client->accounts->flatMap->subAccounts->isNotEmpty();
+                                    @endphp
+
+                                    @if($hasSubAccounts)
+                                        @foreach($client->accounts as $acc)
+                                            @foreach($acc->subAccounts as $sub)
+                                                <span class="px-2 py-0.5 text-[10px] font-bold bg-slate-800 text-emerald-300 border border-slate-700 rounded-lg">
+                                                    {{ $sub->name }}: {{ number_format($sub->balance, 0, ',', ' ') }} XAF
+                                                </span>
+                                            @endforeach
+                                        @endforeach
+                                    @else
+                                        <span class="text-[10px] text-slate-500 italic">Aucune tontine active</span>
+                                    @endif
+                                </div>
                             </td>
-                            <td class="px-6 py-4 text-center">
-                                <a href="{{ route('comptabilite.clients.show', $client->id) }}" class="px-3 py-1.5 text-xs font-bold text-white bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700 transition">
-                                    <i class="bi bi-eye"></i> Détails
+                            <td class="p-3 space-x-2 text-right">
+                                <a href="{{ route('comptabilite.clients.show', $client->id) }}" class="px-2.5 py-1 text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition">
+                                    Fiche Détaillée
                                 </a>
                             </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="px-6 py-8 text-center text-slate-500">Aucun client trouvé.</td>
+                            <td colspan="5" class="p-6 text-center text-slate-500">Aucun client trouvé.</td>
                         </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
+
         <div class="p-4 border-t border-slate-800">
             {{ $clients->links() }}
         </div>
     </div>
-
-    <!-- MODAL CRÉATION NOUVEAU CLIENT -->
-    <div x-show="openNewModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm" x-cloak>
-        <div class="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-5 max-h-[90vh] overflow-y-auto">
-
-            <div class="flex items-center justify-between pb-4 border-b border-slate-800">
-                <h3 class="flex items-center gap-2 text-base font-bold text-white">
-                    <i class="bi bi-person-plus text-emerald-500"></i> Création d'un Nouveau Client
-                </h3>
-                <button @click="openNewModal = false" class="text-slate-400 hover:text-white"><i class="bi bi-x-lg"></i></button>
-            </div>
-
-            <form action="{{ route('comptabilite.clients.store') }}" method="POST" class="space-y-4">
-                @csrf
-
-                <!-- Infos Personnelles -->
-                <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <div>
-                        <label class="block mb-1 text-[11px] font-semibold text-slate-300">Nom Complet du Client *</label>
-                        <input type="text" name="name" required placeholder="Ex: Jean Pascal" class="w-full px-3 py-2 text-xs text-white border bg-slate-950 border-slate-800 rounded-xl focus:border-emerald-500">
-                    </div>
-                    <div>
-                        <label class="block mb-1 text-[11px] font-semibold text-slate-300">Numéro Téléphone *</label>
-                        <input type="text" name="phone" required placeholder="Ex: 699001122" class="w-full px-3 py-2 text-xs text-white border bg-slate-950 border-slate-800 rounded-xl focus:border-emerald-500">
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-                    <div>
-                        <label class="block mb-1 text-[11px] font-semibold text-slate-300">Adresse Email (Optionnel)</label>
-                        <input type="email" name="email" placeholder="client@gmail.com" class="w-full px-3 py-2 text-xs text-white border bg-slate-950 border-slate-800 rounded-xl focus:border-emerald-500">
-                    </div>
-                    <div>
-                        <label class="block mb-1 text-[11px] font-semibold text-slate-300">Zone d'Abonnement *</label>
-                        <select name="zone_id" required class="w-full px-3 py-2 text-xs text-white border bg-slate-950 border-slate-800 rounded-xl focus:border-emerald-500">
-                            <option value="">-- Choisir la Zone --</option>
-                            @foreach($zones as $z)
-                                <option value="{{ $z->id }}">{{ $z->name }}</option>
-                            @endforeach
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Section Tontines & Versements Obligatoires -->
-                <div class="pt-4 space-y-3 border-t border-slate-800">
-                    <h4 class="text-xs font-bold text-white">Sélection des Tontines & Versement Initial Obligatoire (Min 1 000 XAF/tontine)</h4>
-
-                    <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-                        @foreach($tontineTypes as $key => $label)
-                            <div class="p-3 space-y-2 border bg-slate-950 border-slate-800 rounded-xl" x-data="{ checked: false }">
-                                <label class="flex items-center space-x-2 cursor-pointer">
-                                    <input type="checkbox" name="tontines[]" value="{{ $key }}" x-model="checked" class="rounded bg-slate-900 border-slate-800 text-emerald-500 focus:ring-emerald-500">
-                                    <span class="text-xs font-bold text-white">{{ $label }}</span>
-                                </label>
-
-                                <div x-show="checked" class="pt-1">
-                                    <label class="block text-[10px] text-slate-400">Dépôt Initial (Min 1 000 XAF) :</label>
-                                    <input type="number" min="1000" name="deposits[{{ $key }}]" value="1000" :disabled="!checked" class="w-full px-2 py-1 text-xs font-bold border rounded-lg text-emerald-400 bg-slate-900 border-slate-800">
-                                </div>
-                            </div>
-                        @endforeach
-                    </div>
-                </div>
-
-                <div class="flex justify-end gap-3 pt-3 border-t border-slate-800">
-                    <button type="button" @click="openNewModal = false" class="px-4 py-2 text-xs font-bold text-slate-400 bg-slate-800 hover:bg-slate-700 rounded-xl">Annuler</button>
-                    <button type="submit" class="px-4 py-2 text-xs font-bold text-slate-950 bg-emerald-500 hover:bg-emerald-400 rounded-xl">Créer le Client & Activer Tontines</button>
-                </div>
-            </form>
-
-        </div>
-    </div>
-
 </div>
+
+<script>
+    function guichetExpress() {
+        return {
+            type: 'deposit',
+            open: false,
+            search: '',
+            selectedClient: null,
+            selectedSubAccountId: '',
+            rawClients: @json($clientsAgence ?? []),
+            clients: [],
+            filteredClients: [],
+
+            init() {
+                this.clients = (this.rawClients || []).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'fr'));
+                this.filteredClients = this.clients;
+            },
+
+            toggleDropdown() {
+                this.open = !this.open;
+                if (this.open) {
+                    this.$nextTick(() => { if (this.$refs.searchInput) this.$refs.searchInput.focus(); });
+                }
+            },
+
+            filterClients() {
+                if (!this.search || this.search.trim() === '') {
+                    this.filteredClients = this.clients;
+                    return;
+                }
+                const q = this.search.toLowerCase().trim();
+                this.filteredClients = this.clients.filter(c =>
+                    (c.name && c.name.toLowerCase().includes(q)) ||
+                    (c.phone && c.phone.toLowerCase().includes(q))
+                );
+            },
+
+            selectClient(client) {
+                this.selectedClient = client;
+                this.selectedSubAccountId = '';
+                this.open = false;
+            },
+
+            formatMoney(val) {
+                return new Intl.NumberFormat('fr-FR').format(val || 0);
+            }
+        }
+    }
+</script>
 @endsection

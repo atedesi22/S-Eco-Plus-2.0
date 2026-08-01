@@ -145,6 +145,13 @@ Route::middleware(['auth'])->group(function () {
                 Route::get('/clients/{id}', [ComptableDashboardController::class, 'showClient'])->name('clients.show');
                 Route::post('/clients/{id}/add-tontine', [ComptableDashboardController::class, 'addTontine'])->name('clients.add-tontine');
                 Route::post('/clients/{id}/update-status', [ComptableDashboardController::class, 'updateClientStatus'])->name('clients.update-status');
+                // 🟢 Nouvelles routes d'administration du compte client
+                Route::post('/clients/{id}/toggle-block', [ComptableDashboardController::class, 'toggleBlock'])->name('clients.toggle-block');
+                Route::post('/clients/{id}/reset-password', [ComptableDashboardController::class, 'resetPassword'])->name('clients.reset-password');
+                Route::post('/clients/{id}/freeze', [ComptableDashboardController::class, 'freeze'])->name('clients.freeze');
+
+
+                Route::post('/transactions/guichet', [ComptableDashboardController::class, 'storeGuichetTransaction'])->name('transactions.guichet');
 
                 Route::get('/stocks-et-ventes', [ComptableDashboardController::class, 'stockVente'])->name('boutique.index');
 
