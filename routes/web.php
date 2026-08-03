@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\StructureController;
 use App\Http\Controllers\Admin\SuperAdminController;
 use App\Http\Controllers\Admin\ZoneController;
 use App\Http\Controllers\ClientController;
+use App\Http\Controllers\CommercialDashboardController;
 use App\Http\Controllers\Comptabilite\ComptableDashboardController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Directeur\AgencyDirectorDashboardController;
@@ -109,6 +110,45 @@ Route::middleware(['auth'])->group(function () {
             Route::get('/client/dashboard', [ClientController::class, 'index'])->name('client.dashboard');
             Route::post('/client/transaction', [ClientController::class, 'storeTransaction'])->name('client.transaction.store');
             Route::post('/client/sub-account', [ClientController::class, 'storeSubAccount'])->name('client.subaccount.store');
+        });
+
+        // ==========================================
+        // ESPACE DÉDIÉ COMPTABILITÉ (Scoped par Agence)
+        // ==========================================
+        Route::middleware(['auth', 'role:Commercial', 'agency.scope'])
+            ->prefix('commercial')
+            ->name('commercial.')
+            ->group(function () {
+
+                Route::get('/dashboard', [CommercialDashboardController::class, 'index'])->name('dashboard');
+
+                // Gestion des Clients par le Commercial
+                Route::prefix('clients')->name('clients.')->group(function () {
+                    Route::get('/', [CommercialDashboardController::class, 'clientIndex'])->name('index');
+                    Route::get('/create', [CommercialDashboardController::class, 'clientCreate'])->name('create');
+                    Route::post('/', [CommercialDashboardController::class, 'clientStore'])->name('store');
+                    Route::get('/{id}', [CommercialDashboardController::class, 'clientShow'])->name('show');
+                });
+
+                Route::get('/prospects', [CommercialDashboardController::class, 'prospectIndex'])->name('prospects.index');
+                Route::get('/prospects/create', [CommercialDashboardController::class, 'prospectCreate'])->name('prospects.create');
+                Route::post('/prospects', [CommercialDashboardController::class, 'prospectStore'])->name('prospects.store');
+                Route::put('/prospects/{id}', [CommercialDashboardController::class, 'prospectUpdate'])->name('prospects.update');
+
+                // 3. Tontines & Collectes Terrain
+                Route::get('/tontines', [CommercialDashboardController::class, 'tontines'])->name('tontines.index');
+                Route::get('/collectes', [CommercialDashboardController::class, 'collectes'])->name('collectes.index');
+                Route::post('/collectes', [CommercialDashboardController::class, 'store'])->name('collectes.store');
+                Route::get('/versements', [CommercialDashboardController::class, 'versements'])->name('versements.index');
+
+                // 4. Boutique & Articles
+                Route::get('/articles', [CommercialDashboardController::class, 'articles'])->name('articles.index');
+                Route::get('/commandes', [CommercialDashboardController::class, 'commandes'])->name('commandes.index');
+
+                // 5. Performance & Rapports
+                Route::get('/objectifs', [CommercialDashboardController::class, 'objectifs'])->name('objectifs.index');
+                Route::get('/rapports', [CommercialDashboardController::class, 'rapports'])->name('rapports.index');
+
         });
 
         // ==========================================

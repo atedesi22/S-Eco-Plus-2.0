@@ -40,6 +40,7 @@ class User extends Authenticatable
             'password',
             'agency_id',
             'zone_id',
+            'created_by',
             'structure_id',
             'collector_id',
             'mfa_enabled',

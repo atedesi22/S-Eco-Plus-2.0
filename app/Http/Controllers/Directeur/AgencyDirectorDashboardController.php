@@ -579,6 +579,38 @@ class AgencyDirectorDashboardController extends Controller
     }
 
     public function clientsIndex(Request $request)
+    // {
+    //     $user = Auth::user();
+    //     // $agencyColumn = Schema::hasColumn('users', 'structure_id') ? 'structure_id' : 'structure_id';
+    //     $agencyId = Auth::user()->load('agency')->agency_id;
+    //  // return $agencyId;
+
+    //     // Récupérer tous les clients rattachés à l'agence du Directeur
+    //     $clientsQuery = User::whereHas('roles', function ($q) {
+    //             $q->whereIn('name', ['Client', 'client']); // Couvre 'Client' ou 'client'
+    //         })
+    //         ->where('structure_id', $agencyId) // Utilisez 'structure_id' ici si les clients dépendent directement de la structure
+    //         ->with(['accounts', 'structure']);
+
+    //     // $clients = $clientsQuery->latest()->get();
+
+    //     return $clientsQuery;
+
+    //     // Statistiques globales du portefeuille
+    //     $totalClients = $clients->count();
+    //     $activeClients = $clients->where('status', 'active')->count();
+
+    //     // Calcul du solde total épargné dans l'agence
+    //     $totalSavings = Account::whereIn('user_id', $clients->pluck('id'))->sum('balance');
+
+    //     return view('directeur.clients.index', compact(
+    //         'clients',
+    //         'totalClients',
+    //         'activeClients',
+    //         'totalSavings'
+    //     ));
+    // }
+
     {
         $user = Auth::user();
         $agencyColumn = Schema::hasColumn('users', 'structure_id') ? 'structure_id' : 'agency_id';

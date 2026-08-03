@@ -319,7 +319,9 @@
                         <tbody class="divide-y divide-slate-800">
                             @forelse($recentTransactions as $tx)
                                 <tr class="transition hover:bg-slate-800/50">
-                                    <td class="p-3 font-semibold text-white">{{ $tx->client_name }}</td>
+                                    <td class="p-3 font-semibold text-white">
+                                        {{ $tx->client_name ?? 'Client inconnu' }}
+                                    </td>
                                     <td class="p-3 text-slate-400">{{ $tx->agent_name ?? 'Guichet' }}</td>
                                     <td class="p-3">
                                         <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase {{ $tx->type === 'deposit' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400' }}">

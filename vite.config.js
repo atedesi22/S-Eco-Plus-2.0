@@ -8,4 +8,13 @@ export default defineConfig({
             refresh: true,
         }),
     ],
+
+    server: {
+        host: '0.0.0.0',
+        hmr: {
+            host: 'localhost',
+        },
+        cors: true,
+        allowedHosts: ['.ngrok-free.app'], // Autorise tous les sous-domaines ngrok
+    },
 });

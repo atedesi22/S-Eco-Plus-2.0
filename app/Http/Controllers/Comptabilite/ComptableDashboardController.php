@@ -44,21 +44,43 @@ class ComptableDashboardController extends Controller
             )->first();
 
         // 4. 10 Dernières Transactions au niveau de l'agence
-        $recentTransactions = DB::table('transactions')
-            ->leftJoin('users as agent', 'transactions.performed_by', '=', 'agent.id')
-            ->leftJoin('users as client', 'transactions.account_id', '=', 'client.id')
-            ->whereIn('transactions.performed_by', $agencyUserIds)
-            ->orWhereIn('transactions.account_id', $agencyUserIds)
-            ->select(
-                'transactions.*',
-                DB::raw("COALESCE(client.name, 'N/A') as client_name"),
-                DB::raw("COALESCE(agent.name, 'Système') as agent_name")
-            )
-            ->orderBy('transactions.created_at', 'desc')
-            ->take(10)
-            ->get();
+        // $recentTransactions = DB::table('transactions')
+        //     ->leftJoin('users as agent', 'transactions.performed_by', '=', 'agent.id')
+        //     ->leftJoin('users as client', 'transactions.account_id', '=', 'client.id')
+        //     ->whereIn('transactions.performed_by', $agencyUserIds)
+        //     ->orWhereIn('transactions.account_id', $agencyUserIds)
+        //     ->select(
+        //         'transactions.*',
+        //         DB::raw("COALESCE(client.name, 'N/A') as client_name"),
+        //         DB::raw("COALESCE(agent.name, 'Système') as agent_name")
+        //     )
+        //     ->orderBy('transactions.created_at', 'desc')
+        //     ->take(10)
+        //     ->get();
 
-        // 5. Charger la liste des clients de l'agence avec détails des comptes et sous-comptes
+        $recentTransactions = DB::table('transactions')
+        // 1. Jointure sur les comptes pour récupérer l'owner (user_id)
+        ->leftJoin('accounts', 'transactions.account_id', '=', 'accounts.id')
+
+        // 2. Jointure sur la table users pour le CLIENT (via accounts.user_id)
+        ->leftJoin('users as client', 'accounts.user_id', '=', 'client.id')
+
+        // 3. Jointure sur la table users pour l'AGENT/COMPTABLE (qui a fait l'opération)
+        ->leftJoin('users as agent', 'transactions.performed_by', '=', 'agent.id')
+
+        ->whereIn('transactions.performed_by', $agencyUserIds)
+        ->orWhereIn('transactions.account_id', $agencyUserIds)
+        ->select(
+            'transactions.*',
+            DB::raw("COALESCE(client.name, 'N/A') as client_name"),
+            DB::raw("COALESCE(agent.name, 'Système') as agent_name")
+        )
+        ->orderBy('transactions.created_at', 'desc')
+        ->take(10)
+        ->get();
+
+
+            // 5. Charger la liste des clients de l'agence avec détails des comptes et sous-comptes
         $clientsAgence = User::role('Client')
             ->where('structure_id', $agency->id)
             ->select('id', 'name', 'phone')

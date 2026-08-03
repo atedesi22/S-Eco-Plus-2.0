@@ -16,6 +16,11 @@ class DashboardController extends Controller
             return redirect()->route('client.dashboard');
         }
 
+        // Si c'est un commercial
+        if ($user->hasRole('Commercial')) {
+            return redirect()->route('commercial.dashboard');
+        }
+
         // Si c'est un comptable
         if ($user->hasRole('Comptable')) {
             return redirect()->route('comptabilite.dashboard');
