@@ -24,6 +24,10 @@ class Order extends Model
         'paid_amount',
         'threshold_60_amount',
         'status',
+        'client_signature', // <-- AJOUTER ICI
+        'agent_signature',  // <-- AJOUTER ICI
+        'signed_at',
+        'protocol_terms',
         'delivered_approved_by_director',
         'delivered_at',
         'last_payment_at',

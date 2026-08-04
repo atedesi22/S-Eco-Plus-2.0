@@ -231,3 +231,162 @@
 
 </div>
 @endsection
+
+{{-- @extends('layouts.app')
+
+@section('content')
+<div class="max-w-6xl p-4 mx-auto space-y-6 md:p-6">
+
+    <div class="flex flex-col justify-between gap-4 pb-4 border-b md:flex-row md:items-center border-slate-800">
+        <div>
+            <div class="flex items-center gap-3">
+                <a href="{{ route('commercial.commandes.index') }}" class="p-2 transition border text-slate-400 hover:text-white bg-slate-900 border-slate-800 rounded-xl">
+                    <i class="bi bi-arrow-left"></i>
+                </a>
+                <h1 class="text-xl font-bold text-white">Commande N° {{ $order->order_number }}</h1>
+            </div>
+            <p class="mt-1 text-xs text-slate-400 pl-11">Enregistrée le {{ $order->created_at->format('d/m/Y à H:i') }}</p>
+        </div>
+
+        <div class="flex items-center gap-2">
+            @if($order->status === 'in_progress')
+                <span class="px-3 py-1 text-xs font-semibold border rounded-full text-amber-400 bg-amber-400/10 border-amber-400/20">En Cours d'Épargne</span>
+            @elseif($order->status === 'completed')
+                <span class="px-3 py-1 text-xs font-semibold border rounded-full text-emerald-400 bg-emerald-400/10 border-emerald-400/20">Livrée / Solidée</span>
+            @else
+                <span class="px-3 py-1 text-xs font-semibold rounded-full text-slate-400 bg-slate-800">{{ ucfirst($order->status) }}</span>
+            @endif
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div class="p-5 space-y-4 border bg-slate-900 border-slate-800 rounded-2xl md:col-span-2">
+            <div class="flex items-start justify-between">
+                <div>
+                    <h3 class="text-xs font-semibold tracking-wider uppercase text-slate-400">Avancement du Règlement</h3>
+                    <p class="mt-1 text-2xl font-bold text-white">{{ number_format($order->paid_amount, 0, ',', ' ') }} <span class="text-xs text-slate-400">/ {{ number_format($order->total_amount, 0, ',', ' ') }} XAF</span></p>
+                </div>
+                <div class="text-right">
+                    <span class="text-xs text-slate-400">Objectif 60% (Livraison) :</span>
+                    <p class="text-sm font-bold text-emerald-400">{{ number_format($order->threshold_60_amount, 0, ',', ' ') }} XAF</p>
+                </div>
+            </div>
+
+            @php
+                $percentTotal = min(100, round(($order->paid_amount / max(1, $order->total_amount)) * 100));
+                $percent60 = min(100, round(($order->paid_amount / max(1, $order->threshold_60_amount)) * 100));
+            @endphp
+
+            <div class="space-y-2">
+                <div class="flex justify-between text-xs font-semibold">
+                    <span class="text-slate-400">Progression globale</span>
+                    <span class="text-emerald-400">{{ $percentTotal }}%</span>
+                </div>
+                <div class="w-full h-3 bg-slate-950 rounded-full overflow-hidden p-0.5 border border-slate-800">
+                    <div class="h-full transition-all duration-500 rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400" style="width: {{ $percentTotal }}%"></div>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between p-3 text-xs border bg-slate-950/60 border-slate-800/80 rounded-xl">
+                <span class="text-slate-400">Statut Éligibilité Livraison :</span>
+                @if($order->paid_amount >= $order->threshold_60_amount)
+                    <span class="flex items-center gap-1 font-bold text-emerald-400"><i class="bi bi-check-circle-fill"></i> Éligible (Seuil de 60% atteint)</span>
+                @else
+                    <span class="font-medium text-amber-400">Reste {{ number_format($order->threshold_60_amount - $order->paid_amount, 0, ',', ' ') }} XAF avant livraison</span>
+                @endif
+            </div>
+        </div>
+
+        <div class="p-5 space-y-4 border bg-slate-900 border-slate-800 rounded-2xl">
+            <h3 class="text-xs font-semibold tracking-wider uppercase text-slate-400">Compte & Client</h3>
+            <div class="space-y-3">
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center justify-center font-bold w-9 h-9 rounded-xl bg-slate-800 text-emerald-400">
+                        {{ strtoupper(substr($order->client->name ?? 'C', 0, 2)) }}
+                    </div>
+                    <div>
+                        <p class="text-sm font-bold text-white">{{ $order->client->name ?? 'N/A' }}</p>
+                        <p class="text-xs text-slate-400">{{ $order->client->phone ?? 'Pas de numéro' }}</p>
+                    </div>
+                </div>
+
+                <div class="pt-2 space-y-1 text-xs border-t border-slate-800/80">
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Sous-compte lié :</span>
+                        <span class="font-semibold text-emerald-400">{{ $subAccount->name ?? 'Tontine Électroménager' }}</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Solde du Sous-compte :</span>
+                        <span class="font-mono text-white">{{ number_format($subAccount->balance ?? $order->paid_amount, 0, ',', ' ') }} XAF</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="p-5 space-y-4 border bg-slate-900 border-slate-800 rounded-2xl">
+        <h3 class="text-xs font-semibold tracking-wider uppercase text-slate-400">Article Souscrit</h3>
+
+        <div class="flex flex-col justify-between gap-4 p-4 border sm:flex-row sm:items-center bg-slate-950 border-slate-800 rounded-xl">
+            <div class="flex items-center gap-4">
+                @if($order->product?->image_url)
+                    <img src="{{ asset($order->product->image_url) }}" class="object-cover border rounded-lg w-14 h-14 border-slate-800">
+                @else
+                    <div class="flex items-center justify-center rounded-lg w-14 h-14 bg-slate-800 text-slate-500"><i class="text-xl bi bi-box-seam"></i></div>
+                @endif
+                <div>
+                    <h4 class="text-sm font-bold text-white">{{ $order->product->name ?? 'Article non spécifié' }}</h4>
+                    <p class="text-xs text-slate-400 mt-0.5">{{ Str::limit($order->product->description ?? '', 80) }}</p>
+                </div>
+            </div>
+            <div class="pt-2 text-right border-t sm:border-t-0 sm:pt-0 border-slate-800">
+                <span class="text-xs text-slate-400">Type de paiement :</span>
+                <p class="text-xs font-bold text-white uppercase">{{ $order->payment_type === 'installment' ? 'Échelonné (Tontine)' : 'Comptant' }}</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="p-5 space-y-4 border bg-slate-900 border-slate-800 rounded-2xl">
+        <h3 class="text-xs font-semibold tracking-wider uppercase text-slate-400">Protocole de Vente & Signatures Numériques</h3>
+
+        <div class="p-4 font-mono text-xs leading-relaxed border bg-slate-950 border-slate-800/80 rounded-xl text-slate-300">
+            {{ $order->protocol_terms ?? "Protocole valant engagement d'achat échelonné souscrit par le client. Rattaché aux conditions de la microfinance." }}
+        </div>
+
+        <div class="grid grid-cols-1 gap-4 pt-2 md:grid-cols-2">
+
+            <div class="p-4 space-y-2 border bg-slate-950 border-slate-800 rounded-xl">
+                <div class="flex items-center justify-between text-xs">
+                    <span class="font-semibold text-slate-300">Signature du Client</span>
+                    <span class="text-[10px] text-slate-500">{{ $order->signed_at ? \Carbon\Carbon::parse($order->signed_at)->format('d/m/Y H:i') : '' }}</span>
+                </div>
+                <div class="flex items-center justify-center h-32 p-2 overflow-hidden border rounded-lg bg-slate-900/60 border-slate-800">
+                    @if(!empty($order->client_signature))
+                        <img src="{{ $order->client_signature }}" alt="Signature Client" class="object-contain max-w-full max-h-full filter invert opacity-90">
+                    @else
+                        <span class="text-xs italic text-slate-500">Aucune signature enregistrée</span>
+                    @endif
+                </div>
+                <p class="text-[11px] text-slate-400 text-center">{{ $order->client->name ?? 'Le Client' }}</p>
+            </div>
+
+            <div class="p-4 space-y-2 border bg-slate-950 border-slate-800 rounded-xl">
+                <div class="flex items-center justify-between text-xs">
+                    <span class="font-semibold text-slate-300">Signature de l'Agent Commercial</span>
+                    <span class="text-[10px] text-slate-500">{{ $order->signed_at ? \Carbon\Carbon::parse($order->signed_at)->format('d/m/Y H:i') : '' }}</span>
+                </div>
+                <div class="flex items-center justify-center h-32 p-2 overflow-hidden border rounded-lg bg-slate-900/60 border-slate-800">
+                    @if(!empty($order->agent_signature))
+                        <img src="{{ $order->agent_signature }}" alt="Signature Commercial" class="object-contain max-w-full max-h-full filter invert opacity-90">
+                    @else
+                        <span class="text-xs italic text-slate-500">Aucune signature enregistrée</span>
+                    @endif
+                </div>
+                <p class="text-[11px] text-slate-400 text-center">{{ $order->collector->name ?? Auth::user()->name }}</p>
+            </div>
+
+        </div>
+    </div>
+
+</div>
+@endsection --}}

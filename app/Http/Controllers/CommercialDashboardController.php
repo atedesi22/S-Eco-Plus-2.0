@@ -518,7 +518,7 @@ class CommercialDashboardController extends Controller
             );
 
             // 2. Récupération du plan Tontine Électroménager
-            $tontinePlan = Tontine_plan::where('code', 'tontineElectromenager')
+            $tontinePlan = Tontine_plan::where('slug', 'electromenager')
                 ->orWhere('name', 'like', '%Électroménager%')
                 ->first();
 
@@ -526,6 +526,7 @@ class CommercialDashboardController extends Controller
             $subAccount = SubAccount::create([
                 'account_id'      => $account->id,
                 'tontine_plan_id' => $tontinePlan ? $tontinePlan->id : null,
+                'code'            => 'SUB-' . strtoupper(Str::random(5)),
                 'name'            => 'Tontine Article - ' . $product->name,
                 'daily_amount'    => 0, // Librement alimenté lors des tournées
                 'balance'         => 0,
@@ -557,11 +558,21 @@ class CommercialDashboardController extends Controller
     /**
      * Fiche détaillée de la commande (Protocole imprimable, barres de progression, etc.)
      */
-    public function commandeShow(Order $order)
+    public function commandeShow($id)
     {
-        $order->load(['client', 'product', 'payments.collector']);
-        return view('commercial.commandes.show', compact('order'));
+        // 1. Récupération stricte de la commande unique avec eager loading
+        $order = Order::with(['client', 'product', 'payments.collector'])->findOrFail($id);
+
+        // 2. Recherche propre du sous-compte tontine rattaché au client et au produit
+        $subAccount = SubAccount::whereHas('account', function ($query) use ($order) {
+                $query->where('user_id', $order->user_id);
+            })
+            ->where('name', 'like', "%{$order->product->name}%")
+            ->first();
+
+        return view('commercial.commandes.show', compact('order', 'subAccount'));
     }
+
 
     public function recordPayment(Order $order, int $amount, int $collectorId)
     {
