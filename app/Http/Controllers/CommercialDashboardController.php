@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Account;
 use App\Models\Agency;
 use App\Models\CashDeposit;
+use App\Models\InternalMessage;
+use App\Models\Objective;
 use App\Models\Order;
 use App\Models\OrderPayment;
 use App\Models\Product;
@@ -166,16 +168,33 @@ class CommercialDashboardController extends Controller
                 'status'         => 'active',
             ]);
 
-            // 4. Création du Sous-compte / Tontine (SubAccount) si une tontine est spécifiée
+            $subAccountId = null;
+
+            // 4. Création du Sous-compte / Tontine (SubAccount) si spécifiée
             if (!empty($validated['tontine_name'])) {
-                SubAccount::create([
-                    'account_id'   => $account->id,
+                $subAccount = SubAccount::create([
+                    'account_id'      => $account->id,
                     'tontine_plan_id' => $tontineTypeId,
-                    'name'         => $validated['tontine_name'], // Ex: "Tontine Journalière 1000 XAF"
-                    'code'            => 'SUB-' . strtoupper(Str::random(5)),
-                    // 'daily_amount' => $validated['daily_amount'] ?? 0,
-                    'balance'      => $initialAmount,
-                    'status'       => 'active',
+                    'name'            => $validated['tontine_name'],
+                    'code'           => 'SUB-' . strtoupper(Str::random(5)),
+                    'balance'         => $initialAmount,
+                    'status'          => 'active',
+                ]);
+
+                $subAccountId = $subAccount->id;
+            }
+
+            // 5. Enregistrement de la Transaction si un dépôt initial a été effectué
+            if ($initialAmount > 0) {
+                Transaction::create([
+                    'transaction_number' => 'TRX-' . strtoupper(Str::random(8)),
+                    'account_id'         => $account->id,
+                    'sub_account_id'     => $subAccountId,
+                    'performed_by'       => $authUser->id, // Commercial qui encaisse l'argent
+                    'type'               => 'deposit',
+                    'amount'             => $initialAmount,
+                    'description'        => "Dépôt initial à l'ouverture de compte client par " . $authUser->name,
+                    'status'             => 'completed',
                 ]);
             }
 
@@ -608,5 +627,120 @@ class CommercialDashboardController extends Controller
 
             return $payment;
         });
+    }
+
+    /**
+     * Affiche la synthèse journalière
+     */
+    public function rapportIndex()
+    {
+        /** @var User $user */
+        $user = Auth::user();
+        $user->load('zone'); // Charger la relation zone
+        $today = now()->startOfDay();
+
+        $dailyStats = [
+            'accounts_count'  => User::where('created_by', $user->id)
+                                        ->where('created_at', '>=', $today)
+                                        ->count(),
+            'total_collected' => Transaction::where('performed_by', $user->id)
+                                                ->where('type', 'deposit')
+                                                ->where('created_at', '>=', $today)
+                                                ->sum('amount'),
+            'orders_count'    => Order::where('collector_id', $user->id)
+                                        ->where('created_at', '>=', $today)
+                                        ->count(),
+            // Calcul du nombre de prospects enregistrés aujourd'hui
+            'prospects_count' => Prospect::where('commercial_id', $user->id)
+                                        ->where('created_at', '>=', $today)
+                                        ->count(),
+            // Zone pré-remplie depuis la relation zone du commercial
+            'zone_name'       => $user->zone->name ?? 'Non assignée',
+        ];
+
+        return view('commercial.rapports.index', compact('dailyStats'));
+    }
+
+    /**
+     * Envoi manuel ou déclenché du rapport à la comptabilité
+     */
+    public function rapportSendToAccounting(Request $request)
+    {
+        $request->validate([
+            'zone'            => 'required|string|max:255',
+            'prospects_count' => 'required|integer|min:0',
+            'observations'    => 'nullable|string|max:2000',
+        ]);
+
+        /** @var User $user */
+        $user = Auth::user();
+        $today = now()->startOfDay();
+
+        // 1. Nouveaux comptes clients créés aujourd'hui
+        $accountsCount = User::where('created_by', $user->id)
+            ->where('created_at', '>=', $today)
+            ->count();
+
+        // 2. Montant total collecté aujourd'hui
+        $totalCollected = Transaction::where('performed_by', $user->id)
+            ->where('type', 'deposit')
+            ->where('created_at', '>=', $today)
+            ->sum('amount');
+
+        // 3. Commandes / Ventes d'articles effectuées aujourd'hui
+        $ordersCount = Order::where('collector_id', $user->id)
+            ->where('created_at', '>=', $today)
+            ->count();
+
+        // 4. Récupération des comptables
+        $comptables = User::role('Comptable')->get();
+
+        if ($comptables->isEmpty()) {
+            return back()->with('error', 'Aucun comptable disponible pour recevoir le rapport.');
+        }
+
+        // Construction du corps du rapport
+        $body = "📌 FICHE DE RAPPORT JOURNALIER (" . strtoupper($user->name) . ")\n"
+              . "Date : " . now()->format('d/m/Y H:i') . "\n"
+              . "Zone de couverture : " . $request->input('zone') . "\n"
+              . "----------------------------------------\n"
+              . "- Nouveaux comptes créés : {$accountsCount}\n"
+              . "- Prospects enregistrés   : " . $request->input('prospects_count') . "\n"
+              . "- Ventes d'articles      : {$ordersCount}\n"
+              . "- Montant total collecté : " . number_format($totalCollected, 0, ',', ' ') . " XAF\n"
+              . "----------------------------------------\n"
+              . "📝 OBSERVATIONS DU COMMERCIAL :\n"
+              . ($request->input('observations') ?: "Aucune observation particulière.");
+
+        foreach ($comptables as $comptable) {
+            InternalMessage::create([
+                'sender_id'    => $user->id,
+                'recipient_id' => $comptable->id,
+                'subject'      => "Rapport Journalier du " . now()->format('d/m/Y') . " - " . $user->name,
+                'body'         => $body,
+            ]);
+        }
+
+        return back()->with('success', 'Rapport enrichi envoyé avec succès à la comptabilité.');
+    }
+
+    /**
+     * Affiche les objectifs et primes attribués au commercial ou à son groupe/agence
+     */
+    public function objectifIndex()
+    {
+        $user = Auth::user();
+
+        $objectives = Objective::where(function ($query) use ($user) {
+            $query->where('user_id', $user->id)
+                  ->orWhere(function ($q) use ($user) {
+                      $q->where('agency_id', $user->agency_id)
+                        ->where('role_name', $user->getRoleNames()->first());
+                  });
+        })
+        ->where('end_date', '>=', now()->startOfDay())
+        ->get();
+
+        return view('commercial.objectifs.index', compact('objectives'));
     }
 }

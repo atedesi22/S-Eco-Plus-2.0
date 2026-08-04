@@ -153,9 +153,17 @@ Route::middleware(['auth'])->group(function () {
                 Route::get('/commandes/{id}', [CommercialDashboardController::class, 'commandeShow'])->name('commandes.show');
 
                 // 5. Performance & Rapports
-                Route::get('/objectifs', [CommercialDashboardController::class, 'objectifs'])->name('objectifs.index');
-                Route::get('/rapports', [CommercialDashboardController::class, 'rapports'])->name('rapports.index');
+                // --- Module 1 : Objectifs & Primes ---
+                Route::prefix('objectifs')->name('objectifs.')->group(function () {
+                    Route::get('/', [CommercialDashboardController::class, 'objectifIndex'])->name('index');
+                    Route::post('/store', [ObjectiveController::class, 'store'])->name('store')->middleware('role:superadmin|pdg|dg|daf|dom|chef_agence');
+                });
 
+                // --- Module 2 : Rapport Journalier ---
+                Route::prefix('rapports')->name('rapports.')->group(function () {
+                    Route::get('/', [CommercialDashboardController::class, 'rapportIndex'])->name('index');
+                    Route::post('/send', [CommercialDashboardController::class, 'rapportSendToAccounting'])->name('send');
+                });
         });
 
         // ==========================================
