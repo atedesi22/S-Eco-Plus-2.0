@@ -5,6 +5,10 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Models\Account;
 use App\Models\Agency;
+use App\Models\CashDeposit;
+use App\Models\Order;
+use App\Models\OrderPayment;
+use App\Models\Product;
 use App\Models\Prospect;
 use App\Models\Structure;
 use App\Models\SubAccount;
@@ -301,5 +305,284 @@ class CommercialDashboardController extends Controller
         $prospect->update($validated);
 
         return back()->with('success', "Informations du prospect mises à jour.");
+    }
+
+    /**
+     * Catalogue des offres de tontine & historique des souscriptions faites par le commercial.
+     */
+    public function tontineIndex(Request $request)
+    {
+        $search = $request->input('search');
+
+        // 1. Offres / Types de tontines disponibles au catalogue
+        $tontineTypes = Tontine_plan::where('is_active', 'active')->get();
+
+        // 2. Clients du portefeuille commercial pour la modal / sélection
+        $clients = User::role('client')
+            ->where(function($q) {
+                $q->where('created_by', Auth::id())
+                  ->orWhere('collector_id', Auth::id());
+            })
+            ->get();
+
+        // 3. Historique des souscriptions (SubAccounts) récentes initiées par ce commercial
+        $subscriptions = SubAccount::whereHas('account.user', function($q) use ($search) {
+                $q->where('created_by', Auth::id());
+                if ($search) {
+                    $q->where('name', 'like', "%{$search}%")
+                      ->orWhere('phone', 'like', "%{$search}%");
+                }
+            })
+            ->with(['account.user', 'plan'])
+            ->latest()
+            ->paginate(10);
+
+        return view('commercial.tontines.index', compact('tontineTypes', 'clients', 'subscriptions', 'search'));
+    }
+
+    /**
+     * Faire souscrire un client existant à une nouvelle tontine
+     */
+    public function tontineStore(Request $request)
+    {
+        $validated = $request->validate([
+            'user_id'         => 'required|exists:users,id',
+            'tontine_type_id' => 'required|exists:tontine_plans,id',
+            'custom_name'     => 'nullable|string|max:255',
+            'daily_amount'    => 'required|numeric|min:100',
+        ]);
+
+        return DB::transaction(function () use ($validated) {
+            $client = User::findOrFail($validated['user_id']);
+
+            // Récupère ou crée le compte principal d'épargne du client
+            $account = Account::firstOrCreate(
+                ['user_id' => $client->id],
+                [
+                    'account_number' => 'ACC-' . strtoupper(uniqid()),
+                    'balance'        => 0,
+                    'status'         => 'active',
+                ]
+            );
+
+            $tontineType = Tontine_plan::findOrFail($validated['tontine_type_id']);
+
+            // Création du nouveau sous-compte (Tontine)
+            $subAccount = SubAccount::create([
+                'account_id'      => $account->id,
+                'tontine_type_id' => $tontineType->id,
+                'name'            => $validated['custom_name'] ?? $tontineType->name,
+                'daily_amount'    => $validated['daily_amount'],
+                'balance'         => 0,
+                'status'          => 'active',
+            ]);
+
+            return redirect()->route('commercial.tontines.index')
+                ->with('success', "Souscription réussie ! Le sous-compte '{$subAccount->name}' a été attribué à {$client->name}.");
+        });
+    }
+
+    /**
+     * Historique des bordereaux de versement de l'agent.
+     */
+    public function versementIndex(Request $request)
+    {
+        $user = Auth::user();
+
+        $versements = CashDeposit::where('commercial_id', $user->id)
+            ->latest()
+            ->paginate(12);
+
+        // Synthèse rapide pour l'agent
+        $stats = [
+            'total_verse' => CashDeposit::where('commercial_id', $user->id)->where('status', 'approved')->sum('amount'),
+            'en_attente'  => CashDeposit::where('commercial_id', $user->id)->where('status', 'pending')->sum('amount'),
+            'nb_pending'  => CashDeposit::where('commercial_id', $user->id)->where('status', 'pending')->count(),
+        ];
+
+        return view('commercial.versements.index', compact('versements', 'stats'));
+    }
+
+    /**
+     * Soumission d'un nouveau versement à la caisse.
+     */
+    public function versementStore(Request $request)
+    {
+        $validated = $request->validate([
+            'amount'        => 'required|numeric|min:500',
+            'deposit_type'  => 'required|in:frais_dossier,vente_boutique,collecte_globale,autre',
+            'receipt_photo' => 'nullable|image|mimes:jpg,jpeg,png|max:3072',
+            'notes'         => 'nullable|string|max:500',
+        ]);
+
+        $user = Auth::user();
+
+        $photoPath = null;
+        if ($request->hasFile('receipt_photo')) {
+            $photoPath = $request->file('receipt_photo')->store('versements-recus', 'public');
+        }
+
+        CashDeposit::create([
+            'reference_code' => 'VER-' . date('Ymd') . '-' . strtoupper(Str::random(4)),
+            'commercial_id' => $user->id,
+            'agency_id'     => $user->structure_id,
+            'amount'        => $validated['amount'],
+            'deposit_type'  => $validated['deposit_type'],
+            'receipt_photo' => $photoPath,
+            'notes'         => $validated['notes'],
+            'status'        => 'pending',
+        ]);
+
+        return redirect()->route('commercial.versements.index')
+            ->with('success', 'Bordereau de versement soumis avec succès. En attente de validation par la caisse.');
+    }
+
+    public function articles(Request $request)
+    {
+        $search = $request->input('search');
+
+        $products = Product::where('is_available', true)
+            ->when($search, function ($query, $search) {
+                $query->where('name', 'like', "%{$search}%")
+                      ->orWhere('reference', 'like', "%{$search}%");
+            })
+            ->latest()
+            ->paginate(12);
+
+        // Récupère les clients rattachés au commercial pour le formulaire d'accord rapide
+        $clients = User::role('client')
+            ->where(function($q) {
+                $q->where('created_by', auth()->id())
+                  ->orWhere('collector_id', auth()->id());
+            })
+            ->get();
+
+        return view('commercial.commandes.articles', compact('products', 'clients', 'search'));
+    }
+
+    /**
+     * Liste des commandes du portefeuille commercial avec barre d'avancement (60%).
+     */
+    public function commandeIndex(Request $request)
+    {
+        $search = $request->input('search');
+        $status = $request->input('status');
+
+        $orders = Order::with(['client', 'product', 'payments'])
+            ->where(function($q) {
+                $q->where('collector_id', Auth::id())
+                  ->orWhereHas('client', fn($c) => $c->where('created_by', Auth::id()));
+            })
+            ->when($search, function($query, $search) {
+                $query->where('order_number', 'like', "%{$search}%")
+                      ->orWhereHas('client', fn($c) => $c->where('name', 'like', "%{$search}%"));
+            })
+            ->when($status, fn($q, $s) => $q->where('status', $s))
+            ->latest()
+            ->paginate(10);
+
+        return view('commercial.commandes.index', compact('orders', 'search', 'status'));
+    }
+
+    /**
+     * Enregistrement de la commande avec le protocole d'accord signé.
+     */
+    public function commandeStore(Request $request)
+    {
+        $validated = $request->validate([
+            'user_id'          => 'required|exists:users,id',
+            'product_id'       => 'required|exists:products,id',
+            'payment_type'     => 'required|in:cash,installment',
+            'client_signature' => 'required|string', // String base64 venant du canvas HTML5
+            'agent_signature'  => 'required|string', // String base64 venant du canvas HTML5
+        ]);
+
+        return DB::transaction(function () use ($validated) {
+            $product = Product::findOrFail($validated['product_id']);
+
+            $totalAmount = ($validated['payment_type'] === 'cash')
+                ? $product->selling_price_cash
+                : $product->selling_price_installment;
+
+            // Calcul strict des 60% pour déblocage de livraison
+            $threshold60 = (int) ceil($totalAmount * 0.60);
+
+            // 1. Création de la commande avec signature du protocole
+            $order = Order::create([
+                'order_number'        => 'CMD-' . date('Ymd') . '-' . strtoupper(Str::random(4)),
+                'user_id'             => $validated['user_id'],
+                'product_id'          => $product->id,
+                'collector_id'        => Auth::id(),
+                'payment_type'        => $validated['payment_type'],
+                'total_amount'        => $totalAmount,
+                'paid_amount'         => 0,
+                'threshold_60_amount' => $threshold60,
+                'status'              => 'in_progress',
+                'client_signature'   => $validated['client_signature'],
+                'agent_signature'    => $validated['agent_signature'],
+                'signed_at'           => now(),
+                'protocol_terms'      => "Protocole d'accord valant souscription au produit {$product->name}. Livraison garantie à la confirmation du seuil des 60% (soit " . number_format($threshold60, 0, ',', ' ') . " XAF).",
+            ]);
+
+            // 2. CRÉATION AUTOMATIQUE DU SOUS-COMPTE TONTINE ÉLECTROMÉNAGER
+            if ($validated['payment_type'] === 'installment') {
+                Account::create([
+                    'account_number' => 'CPT-TE-' . date('Ymd') . '-' . rand(1000, 9999),
+                    'user_id'        => $validated['user_id'],
+                    'order_id'       => $order->id,
+                    'type'           => 'tontine_electromenager',
+                    'balance'        => 0,
+                    'status'         => 'active',
+                ]);
+            }
+
+            return redirect()->route('commercial.commandes.index')
+                ->with('success', "Commande {$order->order_number} créée et protocole d'accord signé numériquement avec succès !");
+        });
+    }
+
+    /**
+     * Fiche détaillée de la commande (Protocole imprimable, barres de progression, etc.)
+     */
+    public function commandeShow(Order $order)
+    {
+        $order->load(['client', 'product', 'payments.collector']);
+        return view('commercial.commandes.show', compact('order'));
+    }
+
+    public function recordPayment(Order $order, int $amount, int $collectorId)
+    {
+        DB::transaction(function () use ($order, $amount, $collectorId) {
+            $payment = OrderPayment::create([
+                'order_id'     => $order->id,
+                'collected_by' => $collectorId,
+                'amount'       => $amount,
+            ]);
+
+            $order->paid_amount += $amount;
+            $order->last_payment_at = now();
+
+            // Alerte automatique : Passage du statut si franchissement du seuil 60%
+            if ($order->paid_amount >= $order->threshold_60_amount && $order->status === 'in_progress') {
+                $order->status = 'eligible_for_delivery';
+            }
+
+            if ($order->paid_amount >= $order->total_amount) {
+                $order->status = 'completed';
+            }
+// justement l'achat d'un produit en collecte doit automatiquement creer un subacount tontineElectromenager(qui existe deja dans la table tontine_plans)  chez le client
+            $order->save();
+
+            // 3. Créditation automatique du Sous-Compte Tontine Électroménager du Client
+            $account = Account::where('order_id', $order->id)
+                ->where('type', 'tontine_electromenager')
+                ->first();
+
+            if ($account) {
+                $account->increment('balance', $amount);
+            }
+
+            return $payment;
+        });
     }
 }

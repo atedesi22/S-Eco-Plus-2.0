@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Order;
 use App\Models\SubAccount;
 use App\Models\Transaction;
 use App\Models\User;
@@ -17,6 +18,7 @@ class Account extends Model
         'user_id',
         'account_number',
         'type',
+        'order_id',
         'balance',
         'reserve_fund',
         'locked_until',
@@ -33,6 +35,11 @@ class Account extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function order()
+    {
+        return $this->belongsTo(Order::class);
     }
 
     // Relation : Un compte principal a plusieurs sous-comptes / tontines

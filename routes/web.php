@@ -136,14 +136,21 @@ Route::middleware(['auth'])->group(function () {
                 Route::put('/prospects/{id}', [CommercialDashboardController::class, 'prospectUpdate'])->name('prospects.update');
 
                 // 3. Tontines & Collectes Terrain
-                Route::get('/tontines', [CommercialDashboardController::class, 'tontines'])->name('tontines.index');
-                Route::get('/collectes', [CommercialDashboardController::class, 'collectes'])->name('collectes.index');
-                Route::post('/collectes', [CommercialDashboardController::class, 'store'])->name('collectes.store');
-                Route::get('/versements', [CommercialDashboardController::class, 'versements'])->name('versements.index');
+                Route::get('/tontines', [CommercialDashboardController::class, 'tontineIndex'])->name('tontines.index');
+                Route::post('/tontines', [CommercialDashboardController::class, 'tontineStore'])->name('tontines.store');
+
+
+                // Route::get('/collectes', [CommercialDashboardController::class, 'collectes'])->name('collectes.index');
+                // Route::post('/collectes', [CommercialDashboardController::class, 'store'])->name('collectes.store');
+                Route::get('/versements', [CommercialDashboardController::class, 'versementIndex'])->name('versements.index');
+                Route::post('/versements', [CommercialDashboardController::class, 'versementStore'])->name('versements.store');
+
 
                 // 4. Boutique & Articles
                 Route::get('/articles', [CommercialDashboardController::class, 'articles'])->name('articles.index');
-                Route::get('/commandes', [CommercialDashboardController::class, 'commandes'])->name('commandes.index');
+                Route::get('/commandes', [CommercialDashboardController::class, 'commandeIndex'])->name('commandes.index');
+                Route::post('/commandes', [CommercialDashboardController::class, 'commandeStore'])->name('commandes.store');
+                Route::get('/commandes/{id}', [CommercialDashboardController::class, 'commandeShow'])->name('commandes.show');
 
                 // 5. Performance & Rapports
                 Route::get('/objectifs', [CommercialDashboardController::class, 'objectifs'])->name('objectifs.index');

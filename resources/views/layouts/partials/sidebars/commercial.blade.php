@@ -57,11 +57,11 @@
                 <span>Souscriptions Tontine</span>
             </a>
 
-            <a href="{{ route('commercial.collectes.index') }}"
+            {{-- <a href="{{ route('commercial.collectes.index') }}"
                class="flex items-center space-x-3 px-4 py-2 text-sm transition rounded-xl {{ request()->routeIs('commercial.collectes.*') ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">
                 <i class="bi bi-wallet2 text-slate-500"></i>
                 <span>Saisie des Collectes</span>
-            </a>
+            </a> --}}
 
             <a href="{{ route('commercial.versements.index') }}"
                class="flex items-center space-x-3 px-4 py-2 text-sm transition rounded-xl {{ request()->routeIs('commercial.versements.*') ? 'bg-emerald-500/10 text-emerald-400' : 'text-slate-400 hover:bg-slate-800 hover:text-white' }}">

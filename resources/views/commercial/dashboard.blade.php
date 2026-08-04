@@ -114,7 +114,7 @@
                 <h2 class="flex items-center gap-2 text-sm font-bold text-white">
                     <i class="bi bi-clock-history text-emerald-400"></i> Mes Dernières Encaissements
                 </h2>
-                <a href="{{ route('commercial.collectes.index') }}" class="text-xs font-medium text-emerald-400 hover:underline">Voir tout</a>
+                <a href="{{ route('commercial.versements.index') }}" class="text-xs font-medium text-emerald-400 hover:underline">Voir tout</a>
             </div>
 
             <div class="overflow-x-auto">
@@ -201,7 +201,7 @@
                 <button @click="openQuickCollectModal = false" class="text-slate-400 hover:text-white"><i class="bi bi-x-lg"></i></button>
             </div>
 
-            <form action="{{ route('commercial.collectes.store') }}" method="POST" class="space-y-4">
+            <form action="{{ route('commercial.versements.store') }}" method="POST" class="space-y-4">
                 @csrf
                 <div>
                     <label class="block mb-1 text-[11px] font-semibold text-slate-300">Sélectionner le Client *</label>

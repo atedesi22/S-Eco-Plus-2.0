@@ -22,12 +22,18 @@ return new class extends Migration
             $table->integer('total_amount'); // Prix total échelonné ou cash
             $table->integer('paid_amount')->default(0); // Cumul versé
             $table->integer('threshold_60_amount'); // Montant exact correspondant aux 60%
+            $table->longText('client_signature')->nullable(); // Base64 PNG
 
             // Statuts
             $table->enum('status', ['in_progress', 'eligible_for_delivery', 'delivered', 'completed', 'defaulted'])->default('in_progress');
             $table->boolean('delivered_approved_by_director')->default(false);
             $table->timestamp('delivered_at')->nullable();
             $table->timestamp('last_payment_at')->nullable();
+
+
+            $table->longText('agent_signature')->nullable();    // Base64 PNG
+            $table->timestamp('signed_at')->nullable();
+            $table->text('protocol_terms')->nullable(); // Termes spécifiques validés
 
             $table->timestamps();
         });

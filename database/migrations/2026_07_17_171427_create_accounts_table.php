@@ -21,6 +21,7 @@ return new class extends Migration
                 'simple', 'scolaire', 'investissement', 'fin_annee',
                 'assurance', 'islamique', 'marchande', 'electromenager'
             ]);
+            $table->foreignId('order_id')->nullable()->constrained()->onDelete('cascade')->after('user_id');
 
             // Utilisation de decimal pour la précision financière (pas de float !)
             $table->decimal('balance', 15, 2)->default(0.00);
