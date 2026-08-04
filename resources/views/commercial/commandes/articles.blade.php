@@ -68,11 +68,11 @@
 
     <!-- MODALE DU PROTOCOLE D'ACCORD ET SIGNATURE NUMÉRIQUE -->
     <div x-show="showModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-        <div @click.outside="showModal = false" class="w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-4">
+        <div @click.outside="showModal = false" class="w-full max-w-2xl max-h-[90vh] overflow-y-auto p-4 md:p-6 bg-slate-900 border border-slate-800 rounded-2xl space-y-4">
 
             <div class="flex items-center justify-between pb-3 border-b border-slate-800">
                 <div>
-                    <h3 class="text-sm font-bold text-white">Protocole d'Accord & Prise de Commande</h3>
+                    <h3 class="text-sm font-bold text-white">Protocole d'Accord & Souscription Tontine Article</h3>
                     <p class="text-[11px] text-slate-400">Produit : <strong class="text-emerald-400" x-text="selectedProduct?.name"></strong></p>
                 </div>
                 <button @click="showModal = false" class="text-slate-400 hover:text-white"><i class="bi bi-x-lg"></i></button>
@@ -98,131 +98,222 @@
                     <div>
                         <label class="block mb-1 text-[11px] font-semibold text-slate-300">Mode de Règlement *</label>
                         <select name="payment_type" x-model="paymentType" class="w-full px-3 py-2 text-xs text-white border outline-none bg-slate-950 border-slate-800 rounded-xl focus:border-emerald-500">
-                            <option value="installment">Échelonné (Collecte Tontine Article)</option>
+                            <option value="installment">Échelonné (Ouverture Tontine Électroménager)</option>
                             <option value="cash">Paiement Comptant</option>
                         </select>
                     </div>
                 </div>
 
-                <!-- TERMES DU PROTOCOLE D'ACCORD -->
                 <div class="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2 text-[11px] text-slate-300 leading-relaxed font-mono">
-                    <p class="font-bold uppercase text-amber-400">Clauses du Protocole d'Accord :</p>
+                    <p class="font-bold uppercase text-amber-400">Automatisme Sous-Compte & Protocole :</p>
                     <ul class="pl-4 space-y-1 list-disc">
-                        <li>Le souscripteur s'engage à effectuer des versements quotidiens/hebdomadaires réguliers.</li>
-                        <li><strong>Règle des 60% :</strong> Dès que le total des souscriptions atteint <span class="font-bold text-emerald-400" x-text="formatMoney(calculateThreshold())"></span> XAF (60% de la valeur), une alerte est transmise pour valider la livraison physique.</li>
-                        <li><strong>Reliquat 40% :</strong> Le client s'engage à solder les 40% restants selon le planning convenu post-livraison.</li>
+                        <li>Un sous-compte <strong class="text-white">"Tontine Électroménager"</strong> sera automatiquement créé chez le client.</li>
+                        <li><strong>Seuil 60% :</strong> Livraison dès atteinte de <span class="font-bold text-emerald-400" x-text="formatMoney(calculateThreshold())"></span> XAF.</li>
                     </ul>
                 </div>
 
-                <!-- ZONE DE SIGNATURE NUMÉRIQUE (CANVAS HTML5) -->
                 <div class="grid grid-cols-1 gap-4 pt-2 md:grid-cols-2">
-                    <!-- Signature Client -->
                     <div class="space-y-1">
-                        <label class="block text-[11px] font-semibold text-slate-300">Signature Numérique du Client *</label>
-                        <div class="relative p-1 border border-slate-800 bg-slate-950 rounded-xl">
-                            <canvas id="clientCanvas" width="280" height="120" class="w-full border rounded-lg h-28 border-slate-800/60 touch-none bg-slate-900/50 cursor-crosshair"></canvas>
-                            <button type="button" @click="clearCanvas('clientCanvas')" class="absolute top-2 right-2 text-[10px] px-2 py-0.5 bg-slate-800 text-slate-400 rounded hover:text-white">Effacer</button>
+                        <div class="flex items-center justify-between">
+                            <label class="block text-[11px] font-semibold text-slate-300">Signature Client *</label>
+                            <button type="button" @click="clearCanvas('clientCanvas')" class="text-[10px] text-rose-400 hover:underline">Effacer</button>
+                        </div>
+                        <div class="p-1 border border-slate-800 bg-slate-950 rounded-xl">
+                            <canvas id="clientCanvas" class="w-full h-32 border rounded-lg border-slate-800/60 bg-slate-900/50 cursor-crosshair touch-none" style="touch-action: none;"></canvas>
                         </div>
                     </div>
 
-                    <!-- Signature Agent/Commercial -->
                     <div class="space-y-1">
-                        <label class="block text-[11px] font-semibold text-slate-300">Signature Numérique Commercial *</label>
-                        <div class="relative p-1 border border-slate-800 bg-slate-950 rounded-xl">
-                            <canvas id="agentCanvas" width="280" height="120" class="w-full border rounded-lg h-28 border-slate-800/60 touch-none bg-slate-900/50 cursor-crosshair"></canvas>
-                            <button type="button" @click="clearCanvas('agentCanvas')" class="absolute top-2 right-2 text-[10px] px-2 py-0.5 bg-slate-800 text-slate-400 rounded hover:text-white">Effacer</button>
+                        <div class="flex items-center justify-between">
+                            <label class="block text-[11px] font-semibold text-slate-300">Signature Commercial *</label>
+                            <button type="button" @click="clearCanvas('agentCanvas')" class="text-[10px] text-rose-400 hover:underline">Effacer</button>
+                        </div>
+                        <div class="p-1 border border-slate-800 bg-slate-950 rounded-xl">
+                            <canvas id="agentCanvas" class="w-full h-32 border rounded-lg border-slate-800/60 bg-slate-900/50 cursor-crosshair touch-none" style="touch-action: none;"></canvas>
                         </div>
                     </div>
                 </div>
 
                 <div class="flex justify-end gap-2 pt-3">
                     <button type="button" @click="showModal = false" class="px-4 py-2 text-xs text-slate-400 bg-slate-800 hover:bg-slate-700 rounded-xl">Annuler</button>
-                    <button type="submit" class="px-4 py-2 text-xs font-bold shadow-lg text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-xl shadow-emerald-500/10">Valider & Signer le Protocole</button>
+                    <button type="submit" class="px-4 py-2 text-xs font-bold shadow-lg text-slate-950 bg-emerald-400 hover:bg-emerald-300 rounded-xl shadow-emerald-500/10">Créer Commande & Sous-compte</button>
                 </div>
             </form>
         </div>
     </div>
 
+    <script>
+        function orderModalData() {
+            return {
+                showModal: false,
+                selectedProduct: null,
+                paymentType: 'installment',
+
+                openModal(product) {
+                    this.selectedProduct = product;
+                    this.showModal = true;
+                    this.$nextTick(() => {
+                        this.initCanvas('clientCanvas');
+                        this.initCanvas('agentCanvas');
+                    });
+                },
+
+                calculateThreshold() {
+                    if(!this.selectedProduct) return 0;
+                    const price = this.paymentType === 'cash' ? this.selectedProduct.selling_price_cash : this.selectedProduct.selling_price_installment;
+                    return Math.ceil(price * 0.60);
+                },
+
+                formatMoney(amount) {
+                    return new Intl.NumberFormat('fr-FR').format(amount);
+                },
+
+                initCanvas(canvasId) {
+                    const canvas = document.getElementById(canvasId);
+                    if (!canvas) return;
+
+                    // Ajustement dynamique de la résolution Retina / Mobile Canvas
+                    const rect = canvas.getBoundingClientRect();
+                    canvas.width = rect.width;
+                    canvas.height = rect.height;
+
+                    const ctx = canvas.getContext('2d');
+                    ctx.strokeStyle = '#34d399'; // Emerald-400
+                    ctx.lineWidth = 2.5;
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+
+                    let isDrawing = false;
+
+                    const getPoint = (e) => {
+                        const r = canvas.getBoundingClientRect();
+                        return {
+                            x: e.clientX - r.left,
+                            y: e.clientY - r.top
+                        };
+                    };
+
+                    // Événements universels (Mobiles + Tablettes + Sourie)
+                    canvas.onpointerdown = (e) => {
+                        isDrawing = true;
+                        canvas.setPointerCapture(e.pointerId);
+                        const p = getPoint(e);
+                        ctx.beginPath();
+                        ctx.moveTo(p.x, p.y);
+                    };
+
+                    canvas.onpointermove = (e) => {
+                        if (!isDrawing) return;
+                        const p = getPoint(e);
+                        ctx.lineTo(p.x, p.y);
+                        ctx.stroke();
+                    };
+
+                    canvas.onpointerup = canvas.onpointercancel = (e) => {
+                        isDrawing = false;
+                        try { canvas.releasePointerCapture(e.pointerId); } catch(err) {}
+                    };
+                },
+
+                clearCanvas(canvasId) {
+                    const canvas = document.getElementById(canvasId);
+                    if (canvas) {
+                        const ctx = canvas.getContext('2d');
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    }
+                },
+
+                submitForm(e) {
+                    const clientCanvas = document.getElementById('clientCanvas');
+                    const agentCanvas = document.getElementById('agentCanvas');
+
+                    this.$refs.clientSigInput.value = clientCanvas.toDataURL();
+                    this.$refs.agentSigInput.value = agentCanvas.toDataURL();
+                }
+            }
+        }
+    </script>
+
 </div>
 
 <!-- SCRIPT DE GESTION SIGNATURE CANVAS HTML5 -->
-<script>
-function orderModalData() {
-    return {
-        showModal: false,
-        selectedProduct: null,
-        paymentType: 'installment',
-        clientPad: null,
-        agentPad: null,
+{{-- <script>
+    function orderModalData() {
+        return {
+            showModal: false,
+            selectedProduct: null,
+            paymentType: 'installment',
+            clientPad: null,
+            agentPad: null,
 
-        openModal(product) {
-            this.selectedProduct = product;
-            this.showModal = true;
-            this.$nextTick(() => {
-                this.initCanvases();
-            });
-        },
+            openModal(product) {
+                this.selectedProduct = product;
+                this.showModal = true;
+                this.$nextTick(() => {
+                    this.initCanvases();
+                });
+            },
 
-        calculateThreshold() {
-            if(!this.selectedProduct) return 0;
-            const price = this.paymentType === 'cash' ? this.selectedProduct.selling_price_cash : this.selectedProduct.selling_price_installment;
-            return Math.ceil(price * 0.60);
-        },
+            calculateThreshold() {
+                if(!this.selectedProduct) return 0;
+                const price = this.paymentType === 'cash' ? this.selectedProduct.selling_price_cash : this.selectedProduct.selling_price_installment;
+                return Math.ceil(price * 0.60);
+            },
 
-        formatMoney(amount) {
-            return new Intl.NumberFormat('fr-FR').format(amount);
-        },
+            formatMoney(amount) {
+                return new Intl.NumberFormat('fr-FR').format(amount);
+            },
 
-        initCanvases() {
-            this.setupCanvas('clientCanvas');
-            this.setupCanvas('agentCanvas');
-        },
+            initCanvases() {
+                this.setupCanvas('clientCanvas');
+                this.setupCanvas('agentCanvas');
+            },
 
-        setupCanvas(canvasId) {
-            const canvas = document.getElementById(canvasId);
-            if (!canvas) return;
-            const ctx = canvas.getContext('2d');
-            let isDrawing = false;
-
-            ctx.strokeStyle = '#34d399'; // Emerald color
-            ctx.lineWidth = 2;
-
-            const getPos = (e) => {
-                const rect = canvas.getBoundingClientRect();
-                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                return { x: clientX - rect.left, y: clientY - rect.top };
-            };
-
-            const startDrawing = (e) => { isDrawing = true; const pos = getPos(e); ctx.beginPath(); ctx.moveTo(pos.x, pos.y); };
-            const draw = (e) => { if (!isDrawing) return; const pos = getPos(e); ctx.lineTo(pos.x, pos.y); ctx.stroke(); };
-            const stopDrawing = () => { isDrawing = false; };
-
-            canvas.onmousedown = startDrawing;
-            canvas.onmousemove = draw;
-            canvas.onmouseup = stopDrawing;
-
-            canvas.ontouchstart = startDrawing;
-            canvas.ontouchmove = draw;
-            canvas.ontouchend = stopDrawing;
-        },
-
-        clearCanvas(canvasId) {
-            const canvas = document.getElementById(canvasId);
-            if (canvas) {
+            setupCanvas(canvasId) {
+                const canvas = document.getElementById(canvasId);
+                if (!canvas) return;
                 const ctx = canvas.getContext('2d');
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                let isDrawing = false;
+
+                ctx.strokeStyle = '#34d399'; // Emerald color
+                ctx.lineWidth = 2;
+
+                const getPos = (e) => {
+                    const rect = canvas.getBoundingClientRect();
+                    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                    return { x: clientX - rect.left, y: clientY - rect.top };
+                };
+
+                const startDrawing = (e) => { isDrawing = true; const pos = getPos(e); ctx.beginPath(); ctx.moveTo(pos.x, pos.y); };
+                const draw = (e) => { if (!isDrawing) return; const pos = getPos(e); ctx.lineTo(pos.x, pos.y); ctx.stroke(); };
+                const stopDrawing = () => { isDrawing = false; };
+
+                canvas.onmousedown = startDrawing;
+                canvas.onmousemove = draw;
+                canvas.onmouseup = stopDrawing;
+
+                canvas.ontouchstart = startDrawing;
+                canvas.ontouchmove = draw;
+                canvas.ontouchend = stopDrawing;
+            },
+
+            clearCanvas(canvasId) {
+                const canvas = document.getElementById(canvasId);
+                if (canvas) {
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                }
+            },
+
+            submitForm(e) {
+                const clientCanvas = document.getElementById('clientCanvas');
+                const agentCanvas = document.getElementById('agentCanvas');
+
+                this.$refs.clientSigInput.value = clientCanvas.toDataURL();
+                this.$refs.agentSigInput.value = agentCanvas.toDataURL();
             }
-        },
-
-        submitForm(e) {
-            const clientCanvas = document.getElementById('clientCanvas');
-            const agentCanvas = document.getElementById('agentCanvas');
-
-            this.$refs.clientSigInput.value = clientCanvas.toDataURL();
-            this.$refs.agentSigInput.value = agentCanvas.toDataURL();
         }
     }
-}
-</script>
+</script> --}}
 @endsection

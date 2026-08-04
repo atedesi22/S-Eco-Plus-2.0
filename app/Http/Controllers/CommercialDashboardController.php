@@ -493,24 +493,49 @@ class CommercialDashboardController extends Controller
             'user_id'          => 'required|exists:users,id',
             'product_id'       => 'required|exists:products,id',
             'payment_type'     => 'required|in:cash,installment',
-            'client_signature' => 'required|string', // String base64 venant du canvas HTML5
-            'agent_signature'  => 'required|string', // String base64 venant du canvas HTML5
+            'client_signature' => 'required|string',
+            'agent_signature'  => 'required|string',
         ]);
 
         return DB::transaction(function () use ($validated) {
+            $client = User::findOrFail($validated['user_id']);
             $product = Product::findOrFail($validated['product_id']);
 
             $totalAmount = ($validated['payment_type'] === 'cash')
                 ? $product->selling_price_cash
                 : $product->selling_price_installment;
 
-            // Calcul strict des 60% pour déblocage de livraison
             $threshold60 = (int) ceil($totalAmount * 0.60);
 
-            // 1. Création de la commande avec signature du protocole
+            // 1. Récupération ou création du Compte Principal du client
+            $account = Account::firstOrCreate(
+                ['user_id' => $client->id],
+                [
+                    'account_number' => 'ACC-' . strtoupper(uniqid()),
+                    'balance'        => 0,
+                    'status'         => 'active',
+                ]
+            );
+
+            // 2. Récupération du plan Tontine Électroménager
+            $tontinePlan = Tontine_plan::where('code', 'tontineElectromenager')
+                ->orWhere('name', 'like', '%Électroménager%')
+                ->first();
+
+            // 3. Création automatique du Sous-Compte dédié à cet achat
+            $subAccount = SubAccount::create([
+                'account_id'      => $account->id,
+                'tontine_plan_id' => $tontinePlan ? $tontinePlan->id : null,
+                'name'            => 'Tontine Article - ' . $product->name,
+                'daily_amount'    => 0, // Librement alimenté lors des tournées
+                'balance'         => 0,
+                'status'          => 'active',
+            ]);
+
+            // 4. Création de la Commande
             $order = Order::create([
                 'order_number'        => 'CMD-' . date('Ymd') . '-' . strtoupper(Str::random(4)),
-                'user_id'             => $validated['user_id'],
+                'user_id'             => $client->id,
                 'product_id'          => $product->id,
                 'collector_id'        => Auth::id(),
                 'payment_type'        => $validated['payment_type'],
@@ -521,23 +546,11 @@ class CommercialDashboardController extends Controller
                 'client_signature'   => $validated['client_signature'],
                 'agent_signature'    => $validated['agent_signature'],
                 'signed_at'           => now(),
-                'protocol_terms'      => "Protocole d'accord valant souscription au produit {$product->name}. Livraison garantie à la confirmation du seuil des 60% (soit " . number_format($threshold60, 0, ',', ' ') . " XAF).",
+                'protocol_terms'      => "Protocole valant souscription au produit {$product->name}. Rattaché au sous-compte tontine N°{$subAccount->id}.",
             ]);
 
-            // 2. CRÉATION AUTOMATIQUE DU SOUS-COMPTE TONTINE ÉLECTROMÉNAGER
-            if ($validated['payment_type'] === 'installment') {
-                Account::create([
-                    'account_number' => 'CPT-TE-' . date('Ymd') . '-' . rand(1000, 9999),
-                    'user_id'        => $validated['user_id'],
-                    'order_id'       => $order->id,
-                    'type'           => 'tontine_electromenager',
-                    'balance'        => 0,
-                    'status'         => 'active',
-                ]);
-            }
-
             return redirect()->route('commercial.commandes.index')
-                ->with('success', "Commande {$order->order_number} créée et protocole d'accord signé numériquement avec succès !");
+                ->with('success', "Commande {$order->order_number} créée ! Le sous-compte '{$subAccount->name}' a été automatiquement ouvert pour le client.");
         });
     }
 
@@ -570,7 +583,7 @@ class CommercialDashboardController extends Controller
             if ($order->paid_amount >= $order->total_amount) {
                 $order->status = 'completed';
             }
-// justement l'achat d'un produit en collecte doit automatiquement creer un subacount tontineElectromenager(qui existe deja dans la table tontine_plans)  chez le client
+
             $order->save();
 
             // 3. Créditation automatique du Sous-Compte Tontine Électroménager du Client
