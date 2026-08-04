@@ -6,10 +6,12 @@ use App\Http\Controllers\Admin\StructureController;
 use App\Http\Controllers\Admin\SuperAdminController;
 use App\Http\Controllers\Admin\ZoneController;
 use App\Http\Controllers\ClientController;
+use App\Http\Controllers\CollectorDashboardController;
 use App\Http\Controllers\CommercialDashboardController;
 use App\Http\Controllers\Comptabilite\ComptableDashboardController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Directeur\AgencyDirectorDashboardController;
+use App\Http\Controllers\InternalMessageController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Secretaire\SecretaireDashboardController;
 use GuzzleHttp\Client;
@@ -101,6 +103,16 @@ Route::get('/', function () {
 
 // Toutes les routes sécurisées après connexion
 Route::middleware(['auth'])->group(function () {
+
+
+    // ==========================================
+    // 1. MESSAGRIE INTERNE (ACCESSIBLE À TOUS)
+    // ==========================================
+    Route::prefix('messages')->name('messages.')->group(function () {
+        Route::get('/', [InternalMessageController::class, 'index'])->name('index');
+        Route::get('/{id}', [InternalMessageController::class, 'show'])->name('show');
+        Route::post('/send', [InternalMessageController::class, 'send'])->name('send');
+    });
 
     // Point d'entrée unique après le Login (Accès autorisé à tous les utilisateurs authentifiés)
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
@@ -227,6 +239,34 @@ Route::middleware(['auth'])->group(function () {
                 Route::get('/dashboard', [SecretaireDashboardController::class, 'index'])->name('dashboard');
                 Route::post('/clients/store', [SecretaireDashboardController::class, 'storeClient'])->name('clients.store');
 
+        });
+
+        Route::middleware(['auth', 'role:Collectrice', 'agency.scope'])->prefix('collector')->name('collector.')->group(function () {
+
+            // 1. Tableau de bord
+            Route::get('/dashboard', [CollectorDashboardController::class, 'index'])->name('dashboard');
+
+            // 2. Action Terrain : Encaisser Tontine & Historique
+            Route::prefix('collects')->name('collects.')->group(function () {
+                Route::get('/create', [CollectorDashboardController::class, 'create'])->name('create');
+                Route::post('/store', [CollectorDashboardController::class, 'store'])->name('store');
+                Route::get('/history', [CollectorDashboardController::class, 'history'])->name('history');
+            });
+
+            // 3. Mes Clients attribués
+            Route::prefix('clients')->name('clients.')->group(function () {
+                Route::get('/', [CollectorDashboardController::class, 'index'])->name('index');
+                Route::get('/{id}', [CollectorDashboardController::class, 'show'])->name('show');
+            });
+
+            // 4. Caisse & Versements en agence
+            Route::prefix('cash-deposits')->name('cash-deposits.')->group(function () {
+                Route::get('/', [CollectorDashboardController::class, 'index'])->name('index');
+                Route::post('/store', [CollectorDashboardController::class, 'store'])->name('store');
+            });
+
+            // 5. Synthèse Journalière
+            Route::get('/reports/daily', [CollectorDashboardController::class, 'dailyReport'])->name('reports.daily');
         });
 
         Route::middleware(['auth', 'role:Directeur Agence', 'agency.scope'])

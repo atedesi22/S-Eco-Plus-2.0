@@ -4,6 +4,8 @@
     @include('layouts.partials.sidebars.comptabilite')
 @elserole('Secretaire')
     @include('layouts.partials.sidebars.secretaire')
+@elserole('Collectrice')
+    @include('layouts.partials.sidebars.collectrice')
 @elserole('Commercial')
     @include('layouts.partials.sidebars.commercial')
 @else
