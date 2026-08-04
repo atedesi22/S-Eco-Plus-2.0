@@ -64,13 +64,13 @@
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
                 <label for="zone" class="block mb-1 text-xs font-semibold uppercase text-slate-400">Zone Couverte</label>
-                <input type="text" id="zone" name="zone" value="{{ old('zone', $dailyStats['zone_name']) }}"
+                <input type="text" @disabled(true) id="zone" name="zone" value="{{ old('zone', $dailyStats['zone_name']) }}"
                     class="w-full px-3 py-2 text-sm border rounded-xl bg-slate-950 border-slate-800 text-slate-200 focus:outline-none focus:border-teal-500" required>
             </div>
 
             <div>
                 <label for="prospects_count" class="block mb-1 text-xs font-semibold uppercase text-slate-400">Prospects du jour</label>
-                <input type="number" id="prospects_count" name="prospects_count" value="{{ old('prospects_count', $dailyStats['prospects_count']) }}"
+                <input type="number" @disabled(true) id="prospects_count" name="prospects_count" value="{{ old('prospects_count', $dailyStats['prospects_count']) }}"
                     class="w-full px-3 py-2 text-sm border rounded-xl bg-slate-950 border-slate-800 text-slate-200 focus:outline-none focus:border-teal-500" min="0" required>
             </div>
         </div>

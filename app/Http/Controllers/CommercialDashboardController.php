@@ -29,41 +29,46 @@ class CommercialDashboardController extends Controller
     //
     public function index()
     {
-        $commercialId = Auth::id();
+        $user = Auth::user();
+        $today = now();
 
-        // 1. Calculs des KPIs du Commercial
-        $todayCollected = Transaction::where('performed_by', $commercialId)
-            ->where('type', 'deposit')
-            ->whereDate('created_at', now()->today())
-            ->sum('amount');
+        // 1. Récupération de l'objectif actif pour les commerciaux
+        // Recherche par ID utilisateur d'abord, puis par rôle / agence si non trouvé
+        $objective = Objective::where('type', 'new_accounts')
+            ->where('status', 'in_progress')
+            ->where(function ($query) use ($user) {
+                $query->where('user_id', $user->id)
+                    ->orWhere('role_name', 'commercial')
+                    ->orWhere('agency_id', $user->agency_id);
+            })
+            ->whereDate('start_date', '<=', $today)
+            ->whereDate('end_date', '>=', $today)
+            ->latest()
+            ->first();
 
-        $monthlyCollected = Transaction::where('performed_by', $commercialId)
-            ->where('type', 'deposit')
-            ->whereMonth('created_at', now()->month)
-            ->whereYear('created_at', now()->year)
-            ->sum('amount');
+        // Définition de la cible (par défaut 50 si pas d'objectif défini en BDD)
+        $targetValue = $objective ? $objective->target_value : 50;
+        $startDate   = $objective ? $objective->start_date : $today->copy()->startOfMonth();
+        $endDate     = $objective ? $objective->end_date : $today->copy()->endOfMonth();
+
+        // 2. Compter le nombre de comptes créés par ce commercial pendant la période
+        $accountsCreated = User::where('created_by', $user->id)
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->count();
+
+        // 3. Calcul de la prime potentielle (si définie sur l'objectif)
+        $baseBonus = $objective ? $objective->base_bonus : 0;
+        $estimatedPrime = $accountsCreated * $baseBonus;
 
         $kpis = [
-            'today_collected'      => $todayCollected,
-            'monthly_collected'    => $monthlyCollected,
-            'monthly_target'       => 1000000, // Objectif configurable par agent
-            'pending_cash'         => $todayCollected, // Total en possession non encore versé en caisse
-            'new_clients_count'    => User::where('collector_id', $commercialId)->whereMonth('created_at', now()->month)->count(),
-            'estimated_commission' => round($monthlyCollected * 0.05), // Exemple: 5% de commission sur cotisations
+            'objective_title'  => $objective->title ?? 'Objectif de Création de Comptes',
+            'target_accounts'  => $targetValue,
+            'created_accounts' => $accountsCreated,
+            'base_bonus'       => $baseBonus,
+            'estimated_prime'  => $estimatedPrime,
         ];
 
-        // 2. Dernières collectes effectuées
-        $recentCollects = Transaction::where('performed_by', $commercialId)
-            ->with(['account.user', 'subAccount'])
-            ->latest()
-            ->take(6)
-            ->get();
-
-        // 3. Liste des clients rattachés à ce commercial
-        $myClients = User::where('collector_id', $commercialId)
-            ->get(['id', 'name', 'phone']);
-
-        return view('commercial.dashboard', compact('kpis', 'recentCollects', 'myClients'));
+        return view('commercial.dashboard', compact('kpis', 'objective'));
     }
 
     // Gestion des Clients par le Commercial
