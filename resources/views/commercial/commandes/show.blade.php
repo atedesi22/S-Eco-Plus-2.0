@@ -33,7 +33,7 @@
                 <p class="text-xs text-slate-400">Date d'enregistrement : {{ $order->created_at }}</p>
             </div>
         </div>
-{{-- {{ $order->created_at->format('d/m/Y à H:i') }} --}}
+        {{-- {{ $order->created_at->format('d/m/Y à H:i') }} --}}
         <div class="flex items-center gap-2">
             <button onclick="window.print()" class="flex items-center gap-2 px-3 py-2 text-xs font-bold transition border bg-slate-900 border-slate-800 hover:bg-slate-800 text-slate-300 rounded-xl">
                 <i class="bi bi-printer"></i> Imprimer Protocole & Reçu

@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\Order;
+use App\Models\OrderPayment;
 use App\Models\SubAccount;
 use App\Models\Tontine_plan;
 use App\Models\Transaction;
@@ -59,91 +61,92 @@ class ClientController extends Controller
             return redirect()->back()->with('error', 'Action non autorisée.');
         }
 
-
         // --- LOGIQUE DES RETRAITS (WITHDRAWAL) ---
         if ($request->type === 'withdrawal') {
-
-            // 1. Condition stricte : Le montant du retrait doit être au moins de 5 000 XAF
             if ($amount < 5000) {
                 return redirect()->back()->with('error', 'Le montant minimum pour un retrait est de 5 000 XAF.');
             }
 
-            // 2. Calcul des frais par paliers de 25 000 XAF
-            // De 5 000 à 25 000 = 500 | De 25 001 à 50 000 = 1000 | De 50 001 à 75 000 = 1500 ...
             $fees = ceil($amount / 25000) * 500;
             $totalDeduction = $amount + $fees;
 
-            // 3. Vérification si un sous-compte (tontine spécifique) est ciblé
             if ($request->sub_account_id) {
                 $subAccount = $account->subAccounts()->where('id', $request->sub_account_id)->firstOrFail();
-
-                // Le sous-compte doit avoir assez pour couvrir le retrait + les frais
                 if ($subAccount->balance < $totalDeduction) {
-                    return redirect()->back()->with('error', "Solde insuffisant dans cette tontine. Requis (avec frais de {$fee} XAF) : " . number_format($totalDeduction) . " XAF.");
+                    return redirect()->back()->with('error', "Solde insuffisant dans cette tontine. Requis (avec frais de {$fees} XAF) : " . number_format($totalDeduction) . " XAF.");
                 }
             }
 
-            // 4. Vérification finale sur le compte principal (le solde global doit aussi couvrir)
             if ($account->balance < $totalDeduction) {
-                return redirect()->back()->with('error', "Solde général insuffisant pour couvrir le retrait et les frais de {$fee} XAF.");
+                return redirect()->back()->with('error', "Solde général insuffisant pour couvrir le retrait et les frais de {$fees} XAF.");
             }
         }
 
-            DB::beginTransaction();
+        DB::beginTransaction();
 
         try {
-            $amount = $request->amount;
-
             if ($request->type === 'deposit') {
                 // 1. Augmenter le solde principal
                 $account->increment('balance', $amount);
 
-                // 2. Si une tontine est ciblée, augmenter son sous-solde
+                // 2. Si une tontine/sous-compte est ciblé
                 if ($request->sub_account_id) {
                     $subAccount = $account->subAccounts()->where('id', $request->sub_account_id)->firstOrFail();
                     $subAccount->increment('balance', $amount);
 
-                    // Optionnel : Vérifier si l'objectif est atteint
+                    // --- SYNCHRONISATION COMMANDE / TonTINE ARTICLE ---
+                    // On cherche la commande active rattachée à ce produit / sous-compte pour ce client
+                    $order = Order::where('user_id', $client->id)
+                        ->whereNotIn('status', ['completed', 'defaulted'])
+                        ->latest()
+                        ->first();
+
+                    if ($order) {
+                        // a. Enregistrement dans l'historique des paiements de la commande
+                        OrderPayment::create([
+                            'order_id'     => $order->id,
+                            'collected_by' => auth()->id(),
+                            'amount'       => $amount,
+                        ]);
+
+                        // b. Incrémentation du montant versé sur la commande
+                        $order->paid_amount += $amount;
+                        $order->last_payment_at = now();
+
+                        // c. Passage automatique du statut si 60% atteint
+                        if ($order->paid_amount >= $order->threshold_60_amount && $order->status === 'in_progress') {
+                            $order->status = 'eligible_for_delivery';
+                        }
+
+                        // d. Finalisation si 100% totalement soldé
+                        if ($order->paid_amount >= $order->total_amount) {
+                            $order->status = 'completed';
+                        }
+
+                        $order->save();
+                    }
+
                     if ($subAccount->target_amount > 0 && $subAccount->balance >= $subAccount->target_amount) {
-                        // Tu peux changer le statut ou déclencher un événement ici si nécessaire
                         $subAccount->update(['status' => 'completed']);
                     }
                 }
 
             } else {
-            // Retrait : On déduits le Montant + les Frais
-            $account->decrement('balance', $totalDeduction);
+                // Retrait : On déduit le Montant + les Frais
+                $account->decrement('balance', $totalDeduction);
 
-            if ($request->sub_account_id) {
-                $subAccount = $account->subAccounts()->where('id', $request->sub_account_id)->firstOrFail();
-                $subAccount->decrement('balance', $totalDeduction);
+                if ($request->sub_account_id) {
+                    $subAccount = $account->subAccounts()->where('id', $request->sub_account_id)->firstOrFail();
+                    $subAccount->decrement('balance', $totalDeduction);
+                }
             }
-        }
-            // else { // Withdrawal (Retrait)
-            //     // Vérifier le solde disponible global
-            //     if ($account->balance < $amount) {
-            //         return redirect()->back()->with('error', 'Solde insuffisant sur le compte principal.');
-            //     }
 
-            //     // Si le retrait se fait depuis une tontine, vérifier son solde spécifique
-            //     if ($request->sub_account_id) {
-            //         $subAccount = $account->subAccounts()->where('id', $request->sub_account_id)->firstOrFail();
-            //         if ($subAccount->balance < $amount) {
-            //             return redirect()->back()->with('error', 'Solde insuffisant dans cette tontine.');
-            //         }
-            //         $subAccount->decrement('balance', $amount);
-            //     }
-
-            //     // Décrémenter le compte principal
-            //     $account->decrement('balance', $amount);
-            // }
-
-            // 3. Enregistrer la transaction globale dans l'historique
+            // 3. Enregistrer la transaction globale
             $account->transactions()->create([
-                'sub_account_id' => $request->sub_account_id, // Ajoute cette colonne dans ta table transactions si ce n'est pas fait
+                'sub_account_id' => $request->sub_account_id,
                 'type'           => $request->type,
                 'amount'         => $amount,
-                'fees'            => $fees,
+                'fees'           => $fees,
                 'description'    => $request->description,
                 'status'         => 'completed',
                 'reference'      => 'TXN-' . strtoupper(uniqid()),
@@ -151,12 +154,12 @@ class ClientController extends Controller
             ]);
 
             DB::commit();
-            $message = $request->type === 'deposit'
-            ? 'Dépôt effectué avec succès !'
-            : "Retrait effectué avec succès. Frais appliqués : {$fees} XAF.";
 
-            return redirect()->route('client.dashboard')->with('success', $message);
-            // return redirect()->route('client.dashboard')->with('success', 'Transaction effectuée avec succès !');
+            $message = $request->type === 'deposit'
+                ? 'Dépôt effectué et versement synchronisé avec la commande !'
+                : "Retrait effectué avec succès. Frais appliqués : {$fees} XAF.";
+
+            return redirect()->back()->with('success', $message);
 
         } catch (\Exception $e) {
             DB::rollBack();
