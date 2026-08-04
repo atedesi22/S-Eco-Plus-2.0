@@ -107,11 +107,11 @@
                                 {{ $client->collector->name ?? 'Non assignée' }}
                             </td>
                             <td class="p-3 space-x-2 text-right">
-                                <a href="tel:{{ $client->phone }}" class="px-2.5 py-1 text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 rounded-lg transition">
+                                {{-- <a href="tel:{{ $client->phone }}" class="px-2.5 py-1 text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 rounded-lg transition">
                                     <i class="bi bi-telephone-fill"></i> Contact
-                                </a>
+                                </a> --}}
                                 <a href="{{ route('commercial.clients.show', $client->id) }}" class="px-2.5 py-1 text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition">
-                                    Fiche Client
+                                     <i class="bi bi-eye"></i>
                                 </a>
                             </td>
                         </tr>

@@ -17,47 +17,130 @@
     <style>
         body { font-family: 'Plus Jakarta Sans', sans-serif; }
 
-        /* Animation personnalisée pour la pièce qui rebondit et plonge */
-        @keyframes coin-drop {
-            0% { transform: translateY(-80px) rotate(0deg); opacity: 0; }
-            30% { transform: translateY(0) rotate(180deg); opacity: 1; }
-            50% { transform: translateY(-20px) rotate(270deg); }
-            75% { transform: translateY(0) rotate(360deg); }
-            100% { transform: translateY(25px) scale(0.6); opacity: 0; }
+        /* Animation de remplissage de la barre de progression */
+        @keyframes fill-bar {
+            0% {
+                width: 0%;
+            }
+            50% {
+                width: 70%;
+            }
+            100% {
+                width: 100%;
+            }
         }
-        /* Animation légère pour le portefeuille qui "gobe" la pièce */
-        @keyframes wallet-pulse {
-            0%, 100% { transform: scale(1); }
-            60% { transform: scale(1.1); }
+
+        /* Animation de la pièce (Chute 3D + Rebond) */
+        @keyframes coin-drop-3d {
+            0% {
+                transform: translateY(-60px) rotateY(0deg) scale(0.8);
+                opacity: 0;
+            }
+            25% {
+                opacity: 1;
+            }
+            60% {
+                transform: translateY(10px) rotateY(540deg) scale(1);
+            }
+            75% {
+                transform: translateY(-5px) rotateY(720deg) scale(0.95);
+            }
+            90%, 100% {
+                transform: translateY(32px) rotateY(900deg) scale(0.3);
+                opacity: 0;
+            }
         }
-        .animate-coin { animation: coin-drop 4s infinite ease-in-out; }
-        .animate-wallet { animation: wallet-pulse 4s infinite ease-in-out; }
+
+        /* Impulsion du portefeuille à la réception de la pièce */
+        @keyframes wallet-bounce {
+            0%, 65%, 100% {
+                transform: scale(1) translateY(0);
+            }
+            75% {
+                transform: scale(1.12, 0.9) translateY(4px);
+            }
+            85% {
+                transform: scale(0.98, 1.05) translateY(-2px);
+            }
+        }
+
+        /* Animation de l'ombre au sol */
+        @keyframes shadow-scale {
+            0%, 100% { transform: scale(1); opacity: 0.6; }
+            75% { transform: scale(1.2); opacity: 0.9; }
+        }
+
+        /* Éclat lors de l'insertion */
+        @keyframes sparkle-pulse {
+            0%, 70%, 100% { opacity: 0; transform: scale(0.5); }
+            80% { opacity: 1; transform: scale(1.4); }
+        }
+
+        /* Classes CSS d'animation */
+        .animate-progress-fill {
+            animation: fill-bar 3s ease-in-out infinite;
+        }
+        .animate-coin {
+            animation: coin-drop-3d 3.4s infinite cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .animate-wallet {
+            animation: wallet-bounce 3.4s infinite cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .animate-shadow {
+            animation: shadow-scale 3.4s infinite cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .animate-coin-sparkle {
+            animation: sparkle-pulse 3.4s infinite ease-out;
+        }
     </style>
 </head>
 <body class="antialiased bg-slate-950 text-slate-100" x-data="{ loading: true }" x-init="window.addEventListener('load', () => { setTimeout(() => loading = false, 2500) })">
 
     <div x-show="loading"
-         x-transition:leave="transition ease-in duration-500"
-         x-transition:leave-start="opacity-100"
-         x-transition:leave-end="opacity-0"
-         class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-950">
+        x-transition:leave="transition ease-in duration-500"
+        x-transition:leave-start="opacity-100 scale-100"
+        x-transition:leave-end="opacity-0 scale-95"
+        class="fixed inset-0 z-50 flex flex-col items-center justify-center overflow-hidden select-none bg-slate-950">
 
-        <div class="relative flex flex-col items-center justify-center w-32 h-40">
-            <div class="absolute top-0 z-10 flex items-center justify-center w-8 h-8 border rounded-full shadow-lg bg-gradient-to-r from-amber-400 to-yellow-500 border-amber-300 animate-coin">
-                <i class="text-xs font-bold bi bi-currency-exchange text-amber-950"></i>
+        <!-- Halos lumineux d'arrière-plan (Glow Effect) -->
+        <div class="absolute rounded-full w-72 h-72 bg-emerald-500/10 blur-3xl -top-10 -left-10 animate-pulse"></div>
+        <div class="absolute rounded-full w-72 h-72 bg-amber-500/10 blur-3xl -bottom-10 -right-10 animate-pulse" style="animation-delay: 1s;"></div>
+
+        <div class="relative flex flex-col items-center justify-center w-40 h-44">
+
+            <!-- Lumière d'impact au moment de l'insertion de la pièce -->
+            <div class="absolute w-12 h-12 rounded-full bottom-8 bg-amber-400/30 blur-md animate-coin-sparkle"></div>
+
+            <!-- Pièce de monnaie animée (Effet 3D) -->
+            <div class="absolute top-0 z-20 flex items-center justify-center w-10 h-10 border border-amber-200 rounded-full shadow-[0_0_15px_rgba(245,158,11,0.5)] bg-gradient-to-tr from-amber-500 via-yellow-400 to-amber-300 animate-coin">
+                <i class="text-sm font-black bi bi-currency-exchange text-amber-950"></i>
             </div>
 
-            <div class="absolute text-6xl bottom-6 text-emerald-400 animate-wallet">
-                <i class="shadow-2xl bi bi-wallet2"></i>
+            <!-- Portefeuille animé -->
+            <div class="absolute text-6xl bottom-6 text-emerald-400 drop-shadow-[0_10px_20px_rgba(16,185,129,0.3)] animate-wallet">
+                <i class="bi bi-wallet2"></i>
             </div>
+
+            <!-- Ombre portée sous le portefeuille -->
+            <div class="absolute bottom-2 w-16 h-2 bg-emerald-950/60 rounded-[100%] blur-sm animate-shadow"></div>
         </div>
 
-        <div class="mt-4 space-y-1 text-center">
-            <h2 class="text-xl font-bold tracking-wider text-white">S ECO PLUS 2.0</h2>
-            <p class="text-xs tracking-widest uppercase text-slate-400 animate-pulse">Sécurisation de votre avenir...</p>
+        <!-- Conteneur Texte & Progress Bar -->
+        <div class="z-10 mt-6 space-y-3 text-center">
+            <h2 class="text-2xl font-black tracking-wider text-white">
+                S ECO PLUS <span class="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-yellow-200">2.0</span>
+            </h2>
+
+            <!-- Barre de chargement fonctionnelle -->
+            <div class="w-48 h-2 mx-auto bg-slate-900 rounded-full overflow-hidden p-0.5 border border-slate-800">
+                <div class="h-full rounded-full bg-gradient-to-r from-emerald-500 via-cyan-400 to-amber-400 animate-progress-fill"></div>
+            </div>
+
+            <p class="text-[11px] font-semibold tracking-[0.2em] uppercase text-slate-400 animate-pulse">
+                Sécurisation de votre avenir...
+            </p>
         </div>
     </div>
-
 
     <div x-show="!loading" x-transition:enter="transition ease-out duration-500" class="flex flex-col min-h-screen">
 

@@ -192,7 +192,7 @@ class CommercialDashboardController extends Controller
             // 5. Enregistrement de la Transaction si un dépôt initial a été effectué
             if ($initialAmount > 0) {
                 Transaction::create([
-                    'transaction_number' => 'TRX-' . strtoupper(Str::random(8)),
+                    'reference'          => 'TRX-' . strtoupper(Str::random(8)),
                     'account_id'         => $account->id,
                     'sub_account_id'     => $subAccountId,
                     'performed_by'       => $authUser->id, // Commercial qui encaisse l'argent
