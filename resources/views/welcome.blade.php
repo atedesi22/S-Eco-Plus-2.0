@@ -35,19 +35,33 @@
             0% {
                 transform: translateY(-60px) rotateY(0deg) scale(0.8);
                 opacity: 0;
+                z-index: 20; /* Devant le portefeuille */
             }
-            25% {
+            15% {
                 opacity: 1;
             }
+            /* Arrivée juste au dessus de l'ouverture du portefeuille */
+            50% {
+                transform: translateY(35px) rotateY(540deg) scale(1);
+                opacity: 1;
+                z-index: 20;
+            }
+            /* La pièce commence à entrer et passe derrière le portefeuille */
             60% {
-                transform: translateY(10px) rotateY(540deg) scale(1);
+                transform: translateY(60px) rotateY(630deg) scale(0.8);
+                opacity: 1;
+                z-index: 5; /* Passe derrière */
             }
-            75% {
-                transform: translateY(-5px) rotateY(720deg) scale(0.95);
-            }
-            90%, 100% {
-                transform: translateY(32px) rotateY(900deg) scale(0.3);
+            /* Descente profonde à l'intérieur avant disparition */
+            85% {
+                transform: translateY(110px) rotateY(810deg) scale(0.5);
                 opacity: 0;
+                z-index: 5;
+            }
+            100% {
+                transform: translateY(110px) rotateY(900deg) scale(0.5);
+                opacity: 0;
+                z-index: 5;
             }
         }
 

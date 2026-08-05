@@ -15,7 +15,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2 family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <style>body { font-family: 'Plus Jakarta Sans', sans-serif; }</style>
+    <style>body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        [x-cloak] { display: none !important; }
+    </style>
 </head>
 
 <!-- Initialisation globale d'Alpine sur le body pour que le bouton header ET leaside partagent la même variable -->
@@ -23,6 +25,8 @@
 
     <!-- 1. INCLUSION DE LA SIDEBAR DYNAMIQUE -->
         @include('layouts.partials.sidebar')
+
+
 
     <!-- Zone principale -->
     <main class="flex flex-col flex-1 min-w-0 overflow-y-auto">
@@ -33,7 +37,7 @@
                 <button @click="sidebarOpen = true" class="md:hidden text-slate-400 hover:text-white focus:outline-none">
                     <i class="text-2xl bi bi-list"></i>
                 </button>
-                <h3 class="text-lg font-bold text-white">Console Administration Métier</h3>
+                <h3 class="text-lg font-bold text-white">Panel</h3>
             </div>
 
             <form method="POST" action="{{ route('logout') }}">
